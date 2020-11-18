@@ -903,6 +903,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
+ "signal-hook",
  "signature",
  "smallvec 1.4.2",
  "structopt",
@@ -1736,6 +1737,14 @@ dependencies = [
  "serde_bytes",
  "sha2 0.9.2",
  "zeroize",
+]
+
+[[package]]
+name = "ee-1071-regression"
+version = "0.1.0"
+dependencies = [
+ "casper-contract",
+ "casper-types",
 ]
 
 [[package]]
