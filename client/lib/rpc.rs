@@ -13,7 +13,7 @@ use casper_node::{
         chain::{
             BlockIdentifier, GetBlock, GetBlockParams, GetStateRootHash, GetStateRootHashParams,
         },
-        docs::GetRpcs,
+        docs::ListRpcs,
         info::{GetDeploy, GetDeployParams},
         state::{GetAuctionInfo, GetBalance, GetBalanceParams, GetItem, GetItemParams},
         RpcWithOptionalParams, RpcWithParams, RpcWithoutParams, RPC_API_PATH,
@@ -137,8 +137,8 @@ impl RpcCall {
         GetAuctionInfo::request(self)
     }
 
-    pub(crate) fn get_rpcs(self) -> Result<JsonRpc> {
-        GetRpcs::request(self)
+    pub(crate) fn list_rpcs(self) -> Result<JsonRpc> {
+        ListRpcs::request(self)
     }
 
     pub(crate) fn transfer(
@@ -312,7 +312,7 @@ impl RpcClient for GetAuctionInfo {
     const RPC_METHOD: &'static str = Self::METHOD;
 }
 
-impl RpcClient for GetRpcs {
+impl RpcClient for ListRpcs {
     const RPC_METHOD: &'static str = Self::METHOD;
 }
 
@@ -334,4 +334,4 @@ impl IntoJsonMap for GetStateRootHashParams {}
 impl IntoJsonMap for GetDeployParams {}
 impl IntoJsonMap for GetBalanceParams {}
 impl IntoJsonMap for GetItemParams {}
-impl IntoJsonMap for GetRpcs {}
+impl IntoJsonMap for ListRpcs {}
