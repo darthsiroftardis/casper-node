@@ -44,9 +44,9 @@ use crate::{
     crypto::{asymmetric_key::Signature, hash::Digest},
     rpcs::chain::BlockIdentifier,
     types::{
-        json_compatibility::ExecutionResult, Block as LinearBlock, Block, BlockHash, BlockHeader,
-        Deploy, DeployHash, DeployHeader, DeployMetadata, FinalizedBlock, Item, ProtoBlockHash,
-        StatusFeed, Timestamp,
+        Block as LinearBlock, Block, BlockHash, BlockHeader, Deploy, DeployHash, DeployHeader,
+        DeployMetadata, ExecutionResult, FinalizedBlock, Item, ProtoBlockHash, StatusFeed,
+        Timestamp,
     },
     utils::DisplayIter,
     Chainspec,
