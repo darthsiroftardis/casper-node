@@ -57,6 +57,7 @@ start_run_teardown "itst02.sh"
 start_run_teardown "itst11.sh"
 start_run_teardown "itst13.sh" "itst13.chainspec.toml.in"
 start_run_teardown "itst14.sh" "itst14.chainspec.toml.in" "itst14.accounts.toml"
+start_run_teardown "bond_its.sh" "bond_its.chainspec.toml.in" "bond_its.accounts.toml"
 
 # Clean up cloned repo
 popd
