@@ -98,7 +98,7 @@ impl BlockProposer {
         // load the state from storage or use a fresh instance if loading fails.
         let state_key = deploy_sets::create_storage_key(chainspec);
         let effects = effect_builder
-            .load_state::<BlockProposerDeploySets>(state_key.clone().into())
+            .load_finalized_deploys::<BlockProposerDeploySets>(state_key.clone().into())
             .event(move |sets| Event::Loaded {
                 sets,
                 next_finalized_block,
@@ -115,6 +115,21 @@ impl BlockProposer {
 
         Ok((block_proposer, effects))
     }
+
+    fn _from_finalized(stored_deploys: Vec<(DeployHash, DeployHeader)>, height: u64) -> BlockProposerDeploySets {
+        let mut finalized_deploys: HashMap<DeployHash, DeployHeader> = HashMap::new();
+        for (hash, header) in stored_deploys.into_iter() {
+            finalized_deploys.insert(hash, header);
+        };
+        BlockProposerDeploySets {
+            pending: HashMap::new(),
+            finalized_deploys,
+            next_finalized: height + 1,
+            finalization_queue: Default::default()
+        }
+    }
+
+
 }
 
 impl<REv> Component<REv> for BlockProposer

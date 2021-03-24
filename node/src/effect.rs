@@ -1242,7 +1242,7 @@ impl<REv> EffectBuilder<REv> {
     /// Key must be a unique key across the the application, as all keys share a common namespace.
     ///
     /// If an error occurs during state loading or no data is found, returns `None`.
-    pub(crate) async fn load_state<T>(self, key: Cow<'static, [u8]>) -> Option<T>
+    pub(crate) async fn load_finalized_deploys<T>(self, key: Cow<'static, [u8]>) -> Option<T>
     where
         REv: From<StateStoreRequest>,
         T: DeserializeOwned,
