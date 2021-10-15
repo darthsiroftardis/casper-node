@@ -216,7 +216,7 @@ impl<I: Clone + PartialEq + 'static> LinearChainSync<I> {
         block: &Block,
     ) -> Effects<Event<I>>
     where
-        I: Send + 'static,
+        I: Send + Display + 'static,
         REv: ReactorEventT<I>,
     {
         self.peers.reset(rng);
@@ -269,7 +269,7 @@ impl<I: Clone + PartialEq + 'static> LinearChainSync<I> {
         block: Block,
     ) -> Effects<Event<I>>
     where
-        I: Send + 'static,
+        I: Send + Display + 'static,
         REv: ReactorEventT<I>,
     {
         let height = block.height();
@@ -407,7 +407,7 @@ impl<I: Clone + PartialEq + 'static> LinearChainSync<I> {
         effect_builder: EffectBuilder<REv>,
     ) -> Effects<Event<I>>
     where
-        I: Send + 'static,
+        I: Send + Display + 'static,
         REv: ReactorEventT<I>,
     {
         let peer = self.peers.random_unsafe();
@@ -752,13 +752,17 @@ where
                 self.metrics.observe_get_deploys();
                 match fetch_result {
                     event::DeploysResult::Found(block) => {
+                        let mut effects = Effects::new();
+                        let block_height = block.height();
                         let block_hash = block.hash();
-                        trace!(%block_hash, "deploys for linear chain block found");
+                        info!(%block_hash, %block_height, "deploys for linear chain block found");
                         // Reset used peers so we can download next block with the full set.
                         self.peers.reset(rng);
                         // Execute block
                         let finalized_block: FinalizedBlock = (*block).into();
-                        effect_builder.execute_block(finalized_block).ignore()
+                        effects.extend(effect_builder.execute_block(finalized_block).ignore());
+                        effects.extend(self.fetch_next_block_deploys(effect_builder));
+                        effects
                     }
                     event::DeploysResult::NotFound(block, peer) => {
                         let block_hash = block.hash();
@@ -839,7 +843,7 @@ where
     }
 }
 
-fn fetch_block_deploys<I: Clone + Send + 'static, REv>(
+fn fetch_block_deploys<I: Clone + Send + Display + 'static, REv>(
     effect_builder: EffectBuilder<REv>,
     peer: I,
     block: Block,
@@ -847,9 +851,19 @@ fn fetch_block_deploys<I: Clone + Send + 'static, REv>(
 where
     REv: ReactorEventT<I>,
 {
+    let block_height = block.height();
+    let block_hash = *block.hash();
+    info!(
+        %block_hash, %block_height, %peer,
+        "validating block from peer"
+    );
     effect_builder
         .validate_block(peer.clone(), block.clone())
         .event(move |valid| {
+            info!(
+                %block_hash, %block_height,  %peer, valid,
+                "completed validating block from peer"
+            );
             if valid {
                 Event::GetDeploysResult(DeploysResult::Found(Box::new(block)))
             } else {
