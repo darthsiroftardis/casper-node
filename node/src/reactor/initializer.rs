@@ -228,6 +228,10 @@ impl Reactor {
                 .chainspec()
                 .core_config
                 .max_runtime_call_stack_height,
+            chainspec_loader
+                .chainspec()
+                .core_config
+                .max_delegator_size_limit as usize,
             registry,
         )?;
 

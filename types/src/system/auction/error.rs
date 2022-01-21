@@ -280,6 +280,7 @@ pub enum Error {
     /// assert_eq!(42, Error::MintError as u8);
     /// ```
     MintError = 42,
+    ExceededDelegatorSizeLimit = 43,
 }
 
 impl Display for Error {
@@ -328,6 +329,7 @@ impl Display for Error {
             Error::RuntimeStackOverflow => formatter.write_str("Runtime stack overflow"),
             Error::MintError => formatter.write_str("An error in the mint contract execution"),
             Error::GasLimit => formatter.write_str("GasLimit"),
+            Error::ExceededDelegatorSizeLimit => formatter.write_str("Exceeded the number of delegators a validator can have")
         }
     }
 }
@@ -399,6 +401,9 @@ impl TryFrom<u8> for Error {
             d if d == Error::GasLimit as u8 => Ok(Error::GasLimit),
             d if d == Error::RuntimeStackOverflow as u8 => Ok(Error::RuntimeStackOverflow),
             d if d == Error::MintError as u8 => Ok(Error::MintError),
+            d if d == Error::ExceededDelegatorSizeLimit as u8 => {
+                Ok(Error::ExceededDelegatorSizeLimit)
+            }
             _ => Err(TryFromU8ForError(())),
         }
     }

@@ -1821,12 +1821,15 @@ where
             auction::METHOD_DELEGATE => (|| {
                 runtime.charge_system_contract_call(auction_costs.delegate)?;
 
+                // Read in the maximum amount of delegators allowed per validator.
+                let max_delegator_size_limit = self.config.max_delegator_size_limt();
+
                 let delegator = Self::get_named_argument(runtime_args, auction::ARG_DELEGATOR)?;
                 let validator = Self::get_named_argument(runtime_args, auction::ARG_VALIDATOR)?;
                 let amount = Self::get_named_argument(runtime_args, auction::ARG_AMOUNT)?;
 
                 let result = runtime
-                    .delegate(delegator, validator, amount)
+                    .delegate(delegator, validator, amount, max_delegator_size_limit)
                     .map_err(Self::reverter)?;
 
                 CLValue::from_t(result).map_err(Self::reverter)

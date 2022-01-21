@@ -237,6 +237,7 @@ pub trait Auction:
         delegator_public_key: PublicKey,
         validator_public_key: PublicKey,
         amount: U512,
+        max_delegator_size_limit: usize,
     ) -> Result<U512, Error> {
         let provided_account_hash =
             AccountHash::from_public_key(&delegator_public_key, |x| self.blake2b(x));
@@ -278,6 +279,9 @@ pub trait Auction:
                 *delegator.staked_amount()
             }
             None => {
+                if delegators.len() >= max_delegator_size_limit {
+                    return Err(Error::ExceededDelegatorSizeLimit);
+                }
                 let bonding_purse = self.create_purse()?;
                 self.mint_transfer_direct(
                     Some(PublicKey::System.to_account_hash()),
@@ -503,6 +507,9 @@ pub trait Auction:
             assert!(previous_recipients.is_none());
 
             let snapshot = snapshot.into_iter().rev().take(snapshot_size).collect();
+
+            // Impose the limit here -> Network killer
+
             detail::set_seigniorage_recipients_snapshot(self, snapshot)?;
         }
 

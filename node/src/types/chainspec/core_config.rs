@@ -32,6 +32,7 @@ pub struct CoreConfig {
     pub(crate) max_associated_keys: u32,
     /// Maximum height of contract runtime call stack.
     pub(crate) max_runtime_call_stack_height: u32,
+    pub(crate) max_delegator_size_limit: u32,
 }
 
 #[cfg(test)]
@@ -44,6 +45,7 @@ impl CoreConfig {
         let auction_delay = rng.gen::<u32>() as u64;
         let locked_funds_period = TimeDiff::from(rng.gen_range(600_000..604_800_000));
         let unbonding_delay = rng.gen_range(1..1_000_000_000);
+        let max_delegator_size_limit = rng.gen_range(1000..1500);
         let round_seigniorage_rate = Ratio::new(
             rng.gen_range(1..1_000_000_000),
             rng.gen_range(1..1_000_000_000),
@@ -61,6 +63,7 @@ impl CoreConfig {
             round_seigniorage_rate,
             max_associated_keys,
             max_runtime_call_stack_height,
+            max_delegator_size_limit,
         }
     }
 }
@@ -77,6 +80,7 @@ impl ToBytes for CoreConfig {
         buffer.extend(self.round_seigniorage_rate.to_bytes()?);
         buffer.extend(self.max_associated_keys.to_bytes()?);
         buffer.extend(self.max_runtime_call_stack_height.to_bytes()?);
+        buffer.extend(self.max_delegator_size_limit.to_bytes()?);
         Ok(buffer)
     }
 
@@ -90,6 +94,7 @@ impl ToBytes for CoreConfig {
             + self.round_seigniorage_rate.serialized_length()
             + self.max_associated_keys.serialized_length()
             + self.max_runtime_call_stack_height.serialized_length()
+            + self.max_delegator_size_limit.serialized_length()
     }
 }
 
@@ -104,6 +109,7 @@ impl FromBytes for CoreConfig {
         let (round_seigniorage_rate, remainder) = Ratio::<u64>::from_bytes(remainder)?;
         let (max_associated_keys, remainder) = FromBytes::from_bytes(remainder)?;
         let (max_runtime_call_stack_height, remainder) = FromBytes::from_bytes(remainder)?;
+        let (max_delegator_size_limit, remainder) = FromBytes::from_bytes(remainder)?;
         let config = CoreConfig {
             era_duration,
             minimum_era_height,
@@ -114,6 +120,7 @@ impl FromBytes for CoreConfig {
             round_seigniorage_rate,
             max_associated_keys,
             max_runtime_call_stack_height,
+            max_delegator_size_limit,
         };
         Ok((config, remainder))
     }

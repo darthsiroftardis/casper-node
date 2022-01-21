@@ -8,6 +8,8 @@ pub const DEFAULT_MAX_QUERY_DEPTH: u64 = 5;
 pub const DEFAULT_MAX_ASSOCIATED_KEYS: u32 = 100;
 /// Default value for maximum runtime call stack height configuration option.
 pub const DEFAULT_MAX_RUNTIME_CALL_STACK_HEIGHT: u32 = 12;
+/// Default value for the maximum amount of delegators per validator
+pub const DEFAULT_DELEGATOR_SIZE_LIMIT: usize = 1000;
 
 /// The runtime configuration of the execution engine
 #[derive(Debug, Copy, Clone)]
@@ -19,6 +21,7 @@ pub struct EngineConfig {
     /// [`Weight`](casper_types::account::Weight)s) for a single account.
     max_associated_keys: u32,
     max_runtime_call_stack_height: u32,
+    max_delegator_size_limit: usize,
     wasm_config: WasmConfig,
     system_config: SystemConfig,
 }
@@ -29,6 +32,7 @@ impl Default for EngineConfig {
             max_query_depth: DEFAULT_MAX_QUERY_DEPTH,
             max_associated_keys: DEFAULT_MAX_ASSOCIATED_KEYS,
             max_runtime_call_stack_height: DEFAULT_MAX_RUNTIME_CALL_STACK_HEIGHT,
+            max_delegator_size_limit: DEFAULT_DELEGATOR_SIZE_LIMIT,
             wasm_config: WasmConfig::default(),
             system_config: SystemConfig::default(),
         }
@@ -41,6 +45,7 @@ impl EngineConfig {
         max_query_depth: u64,
         max_associated_keys: u32,
         max_runtime_call_stack_height: u32,
+        max_delegator_size_limit: usize,
         wasm_config: WasmConfig,
         system_config: SystemConfig,
     ) -> EngineConfig {
@@ -50,6 +55,7 @@ impl EngineConfig {
             max_runtime_call_stack_height,
             wasm_config,
             system_config,
+            max_delegator_size_limit,
         }
     }
 
@@ -71,5 +77,10 @@ impl EngineConfig {
     /// Returns the current system config.
     pub fn system_config(&self) -> &SystemConfig {
         &self.system_config
+    }
+
+    /// Foo.
+    pub fn max_delegator_size_limt(&self) -> usize {
+        self.max_delegator_size_limit
     }
 }

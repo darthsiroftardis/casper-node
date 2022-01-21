@@ -7,7 +7,8 @@ use casper_engine_test_support::{
 };
 use casper_execution_engine::{
     core::engine_state::{
-        EngineConfig, UpgradeConfig, DEFAULT_MAX_QUERY_DEPTH, DEFAULT_MAX_RUNTIME_CALL_STACK_HEIGHT,
+        engine_config::DEFAULT_DELEGATOR_SIZE_LIMIT, EngineConfig, UpgradeConfig,
+        DEFAULT_MAX_QUERY_DEPTH, DEFAULT_MAX_RUNTIME_CALL_STACK_HEIGHT,
     },
     shared::{
         host_function_costs::{Cost, HostFunction, HostFunctionCosts},
@@ -714,6 +715,7 @@ fn make_engine_config(new_mint_costs: MintCosts, new_wasm_config: WasmConfig) ->
         DEFAULT_MAX_QUERY_DEPTH,
         DEFAULT_MAX_ASSOCIATED_KEYS,
         DEFAULT_MAX_RUNTIME_CALL_STACK_HEIGHT,
+        DEFAULT_DELEGATOR_SIZE_LIMIT,
         new_wasm_config,
         new_system_config,
     )
