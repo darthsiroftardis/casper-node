@@ -8,6 +8,7 @@ pub(crate) mod filter_reactor;
 mod multi_stage_test_reactor;
 pub(crate) mod network;
 pub(crate) mod test_clock;
+mod test_deploy_acceptor;
 mod test_rng;
 
 use std::{
@@ -42,6 +43,7 @@ use crate::{
 pub(crate) use condition_check_reactor::ConditionCheckReactor;
 pub(crate) use multi_stage_test_reactor::MultiStageTestReactor;
 use schemars::schema::RootSchema;
+pub(crate) use test_deploy_acceptor::{DeployAcceptor, Event};
 pub(crate) use test_rng::TestRng;
 
 /// Time to wait (at most) for a `fatal` to resolve before considering the dropping of a responder a

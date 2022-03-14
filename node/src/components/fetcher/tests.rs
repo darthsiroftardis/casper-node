@@ -11,8 +11,10 @@ use thiserror::Error;
 use casper_types::ProtocolVersion;
 
 use super::*;
+use crate::components::deploy_acceptor;
+use crate::components::deploy_acceptor::Error as DeployAcceptorError;
 use crate::{
-    components::{deploy_acceptor, in_memory_network::NetworkController, storage},
+    components::{in_memory_network::NetworkController, storage},
     effect::{
         announcements::{DeployAcceptorAnnouncement, NetworkAnnouncement},
         Responder,
@@ -22,7 +24,7 @@ use crate::{
     testing,
     testing::{
         network::{Network, NetworkedReactor},
-        ConditionCheckReactor, TestRng,
+        ConditionCheckReactor, DeployAcceptor, Event as TestDAEvents, TestRng,
     },
     types::{Deploy, DeployHash, NodeId},
     utils::{WithDir, RESOURCES_PATH},
@@ -77,7 +79,7 @@ reactor!(Reactor {
             false,
             "test"
         );
-        deploy_acceptor = DeployAcceptor(false, &*chainspec_loader.chainspec(), registry);
+        deploy_acceptor = DeployAcceptor();
         deploy_fetcher = Fetcher::<Deploy>("deploy", cfg.fetcher_config, registry);
     }
 
@@ -163,7 +165,7 @@ impl Reactor {
                     self.dispatch_event(
                         effect_builder,
                         rng,
-                        ReactorEvent::DeployAcceptor(deploy_acceptor::Event::Accept {
+                        ReactorEvent::DeployAcceptor(TestDAEvents::Accept {
                             deploy,
                             source: Source::Peer(sender),
                             maybe_responder: None,
@@ -218,7 +220,7 @@ async fn store_deploy(
     deploy: &Deploy,
     node_id: &NodeId,
     network: &mut Network<Reactor>,
-    responder: Option<Responder<Result<(), deploy_acceptor::Error>>>,
+    responder: Option<Responder<Result<(), DeployAcceptorError>>>,
     rng: &mut TestRng,
 ) {
     network

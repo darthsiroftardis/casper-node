@@ -24,10 +24,11 @@ use casper_execution_engine::{
 use casper_types::ProtocolVersion;
 
 use super::*;
+use crate::components::deploy_acceptor;
 use crate::{
     components::{
         contract_runtime::{self, ContractRuntime, ContractRuntimeAnnouncement},
-        deploy_acceptor::{self, DeployAcceptor},
+        // deploy_acceptor::{self, DeployAcceptor},
         in_memory_network::{self, InMemoryNetwork, NetworkController},
         storage::{self, Storage},
     },
@@ -44,7 +45,7 @@ use crate::{
     testing,
     testing::{
         network::{Network, NetworkedReactor},
-        ConditionCheckReactor, TestRng,
+        ConditionCheckReactor, DeployAcceptor, Event as TestDAEvents, TestRng,
     },
     types::{Chainspec, Deploy, NodeId, Tag},
     utils::{Loadable, WithDir},
@@ -62,7 +63,7 @@ enum Event {
     #[from]
     Storage(#[serde(skip_serializing)] storage::Event),
     #[from]
-    DeployAcceptor(#[serde(skip_serializing)] deploy_acceptor::Event),
+    DeployAcceptor(#[serde(skip_serializing)] TestDAEvents),
     #[from]
     DeployGossiper(super::Event<Deploy>),
     #[from]
@@ -212,8 +213,7 @@ impl reactor::Reactor for Reactor {
         )
         .unwrap();
 
-        let deploy_acceptor =
-            DeployAcceptor::new(false, &Chainspec::from_resources("local"), registry).unwrap();
+        let deploy_acceptor = DeployAcceptor::new().unwrap();
         let deploy_gossiper = Gossiper::new_for_partial_items(
             "deploy_gossiper",
             config,
@@ -315,7 +315,7 @@ impl reactor::Reactor for Reactor {
                                 return Effects::new();
                             }
                         };
-                        Event::DeployAcceptor(deploy_acceptor::Event::Accept {
+                        Event::DeployAcceptor(TestDAEvents::Accept {
                             deploy,
                             source: Source::Peer(sender),
                             maybe_responder: None,
@@ -339,7 +339,7 @@ impl reactor::Reactor for Reactor {
                 deploy,
                 responder,
             }) => {
-                let event = deploy_acceptor::Event::Accept {
+                let event = TestDAEvents::Accept {
                     deploy,
                     source: Source::Client,
                     maybe_responder: responder,
