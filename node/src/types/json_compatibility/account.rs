@@ -64,6 +64,13 @@ pub struct Account {
     action_thresholds: ActionThresholds,
 }
 
+impl Account {
+    pub(crate)     /// Returns main purse.
+    fn main_purse(&self) -> URef {
+        self.main_purse
+    }
+}
+
 impl From<&ExecutionEngineAccount> for Account {
     fn from(ee_account: &ExecutionEngineAccount) -> Self {
         Account {
