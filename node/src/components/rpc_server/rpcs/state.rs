@@ -3,7 +3,6 @@
 // TODO - remove once schemars stops causing warning.
 #![allow(clippy::field_reassign_with_default)]
 
-use std::future::Future;
 use std::str;
 
 use futures::{future::BoxFuture, FutureExt};
@@ -21,15 +20,12 @@ use casper_execution_engine::{
 };
 use casper_hashing::Digest;
 use casper_types::{
-    account::{Account as DomainAccount, AccountHash},
+    account::AccountHash,
     bytesrepr::{Bytes, ToBytes},
     CLValue, Key, ProtocolVersion, PublicKey, SecretKey, StoredValue as DomainStoredValue, URef,
     U512,
 };
 
-use crate::rpcs::common::run_query_and_encode;
-use crate::types::json_compatibility::Account;
-use crate::types::BlockHeader;
 use crate::{
     components::rpc_server::rpcs::RpcWithOptionalParams,
     effect::EffectBuilder,
@@ -58,9 +54,12 @@ static GET_ITEM_RESULT: Lazy<GetItemResult> = Lazy::new(|| GetItemResult {
     merkle_proof: MERKLE_PROOF.clone(),
 });
 static GET_BALANCE_PARAMS: Lazy<GetBalanceParams> = Lazy::new(|| GetBalanceParams {
-    state_root_hash: *Block::doc_example().header().state_root_hash(),
-    purse_uref: "uref-09480c3248ef76b603d386f3f4f8a5f87f597d4eaffd475433f861af187ab5db-007"
-        .to_string(),
+    state_identifier: GlobalStateIdentifierV2::StateRootHash(
+        *Block::doc_example().header().state_root_hash(),
+    ),
+    purse_identifier: PurseIdentifier::PurseUref(
+        "uref-09480c3248ef76b603d386f3f4f8a5f87f597d4eaffd475433f861af187ab5db-007".to_string(),
+    ),
 });
 static GET_BALANCE_RESULT: Lazy<GetBalanceResult> = Lazy::new(|| GetBalanceResult {
     api_version: DOCS_EXAMPLE_PROTOCOL_VERSION,
@@ -220,14 +219,51 @@ impl RpcWithParamsExt for GetItem {
     }
 }
 
+/// Identifier for possible ways to query Global State.
+///
+/// Note: this differs from the original `GlobalStateIdentifier` enum in that it's intended to be
+/// flattened into parent structs, and in that it snake-cases its variants.  This results in JSON
+/// like
+/// ```json
+/// { "block_hash": "...", "purse_uref": "..." }
+/// { "state_root_hash": "...", "purse_uref": "..." }
+/// ```
+/// rather than
+/// ```json
+/// { "state_identifier": { "BlockHash": "..." }, "purse_uref": "..." }
+/// { "state_identifier": { "StateRootHash": "..." }, "purse_uref": "..." }
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum GlobalStateIdentifierV2 {
+    /// Query using a block hash.
+    BlockHash(BlockHash),
+    /// Query using the state root hash.
+    StateRootHash(Digest),
+}
+
+/// Identifier for the main purse of a given account.
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum PurseIdentifier {
+    /// Query for an account's main purse balance using the PublicKey.
+    PublicKey(PublicKey),
+    /// Query for an account's main purse balance using the AccountHash.
+    AccountHash(AccountHash),
+    /// Query for a purse balance using the URef.
+    PurseUref(String),
+}
+
 /// Params for "state_get_balance" RPC request.
 #[derive(Serialize, Deserialize, Debug, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GetBalanceParams {
     /// The hash of state root.
-    pub state_root_hash: Digest,
+    #[serde(flatten)]
+    pub state_identifier: GlobalStateIdentifierV2,
     /// Formatted URef.
-    pub purse_uref: String,
+    #[serde(flatten)]
+    pub purse_identifier: PurseIdentifier,
 }
 
 impl DocExample for GetBalanceParams {
@@ -272,17 +308,55 @@ impl RpcWithParamsExt for GetBalance {
         api_version: ProtocolVersion,
     ) -> BoxFuture<'static, Result<Response<Body>, Error>> {
         async move {
+            let state_root_hash = match params.state_identifier {
+                GlobalStateIdentifierV2::BlockHash(block_hash) => {
+                    match effect_builder
+                        .get_block_header_from_storage(block_hash)
+                        .await
+                    {
+                        None => {
+                            let error_msg =
+                                "query_global_state failed to retrieve specified block header"
+                                    .to_string();
+                            return Ok(response_builder.error(warp_json_rpc::Error::custom(
+                                ErrorCode::NoSuchBlock as i64,
+                                error_msg,
+                            ))?);
+                        }
+                        Some(header) => *header.state_root_hash(),
+                    }
+                }
+                GlobalStateIdentifierV2::StateRootHash(state_root_hash) => state_root_hash,
+            };
+
             // Try to parse the purse's URef from the params.
-            let purse_uref = match URef::from_formatted_str(&params.purse_uref)
-                .map_err(|error| format!("failed to parse purse_uref: {:?}", error))
-            {
-                Ok(uref) => uref,
-                Err(error_msg) => {
-                    info!("{}", error_msg);
-                    return Ok(response_builder.error(warp_json_rpc::Error::custom(
-                        ErrorCode::ParseGetBalanceURef as i64,
-                        error_msg,
-                    ))?);
+            let purse_uref = match params.purse_identifier {
+                PurseIdentifier::PublicKey(account_public_key) => {
+                    let account_hash = account_public_key.to_account_hash();
+                    match get_account(effect_builder, state_root_hash, account_hash).await {
+                        Ok(account) => account.main_purse(),
+                        Err(error) => return Ok(response_builder.error(error)?),
+                    }
+                }
+                PurseIdentifier::AccountHash(account_hash) => {
+                    match get_account(effect_builder, state_root_hash, account_hash).await {
+                        Ok(account) => account.main_purse(),
+                        Err(error) => return Ok(response_builder.error(error)?),
+                    }
+                }
+                PurseIdentifier::PurseUref(formatted_uref_string) => {
+                    match URef::from_formatted_str(&formatted_uref_string)
+                        .map_err(|error| format!("failed to parse purse_uref: {:?}", error))
+                    {
+                        Ok(uref) => uref,
+                        Err(error_msg) => {
+                            info!("{}", error_msg);
+                            return Ok(response_builder.error(warp_json_rpc::Error::custom(
+                                ErrorCode::ParseGetBalanceURef as i64,
+                                error_msg,
+                            ))?);
+                        }
+                    }
                 }
             };
 
@@ -290,7 +364,7 @@ impl RpcWithParamsExt for GetBalance {
             let balance_result = effect_builder
                 .make_request(
                     |responder| RpcRequest::GetBalance {
-                        state_root_hash: params.state_root_hash,
+                        state_root_hash,
                         purse_uref,
                         responder,
                     },
@@ -996,103 +1070,6 @@ impl RpcWithParamsExt for GetTrie {
     }
 }
 
-/// Identifier for the main purse of a given account.
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-pub enum MainPurseIdentifier {
-    PublicKey(PublicKey),
-    AccountHash(AccountHash),
-    PurseUref(String),
-}
-
-#[derive(Serialize, Deserialize, Debug, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct GetAccountBalanceParams {
-    state_identifier: GlobalStateIdentifier,
-    purse_identifier: MainPurseIdentifier,
-}
-
-impl DocExample for GetAccountBalanceParams {
-    fn doc_example() -> &'static Self {
-        todo!()
-    }
-}
-
-pub struct GetAccountBalance {}
-
-impl RpcWithParams for GetAccountBalance {
-    const METHOD: &'static str = "state_get_account_balance";
-    type RequestParams = GetAccountBalanceParams;
-    type ResponseResult = GetBalanceResult;
-}
-
-impl RpcWithParamsExt for GetAccountBalance {
-    fn handle_request<REv: ReactorEventT>(
-        effect_builder: EffectBuilder<REv>,
-        response_builder: Builder,
-        params: Self::RequestParams,
-        api_version: ProtocolVersion,
-    ) -> BoxFuture<'static, Result<Response<Body>, Error>> {
-        async move {
-            let state_root_hash = match params.state_identifier {
-                GlobalStateIdentifier::BlockHash(block_hash) => {
-                    match effect_builder
-                        .get_block_header_from_storage(block_hash)
-                        .await
-                    {
-                        None => {
-                            let error_msg =
-                                "query_global_state failed to retrieve specified block header"
-                                    .to_string();
-                            return Ok(response_builder.error(warp_json_rpc::Error::custom(
-                                ErrorCode::NoSuchBlock as i64,
-                                error_msg,
-                            ))?);
-                        }
-                        Some(header) => *header.state_root_hash(),
-                    }
-                }
-                GlobalStateIdentifier::StateRootHash(state_root_hash) => state_root_hash,
-            };
-
-            let purse_uref = match params.purse_identifier {
-                MainPurseIdentifier::PublicKey(account_public_key) => {
-                    let account_hash = account_public_key.to_account_hash();
-                    match get_account(effect_builder, state_root_hash, account_hash).await {
-                        Ok(account) => account.main_purse(),
-                        Err(error) => return Ok(response_builder.error(error)?),
-                    }
-                }
-                MainPurseIdentifier::AccountHash(account_hash) => {
-                    match get_account(effect_builder, state_root_hash, account_hash).await {
-                        Ok(account) => account.main_purse(),
-                        Err(error) => return Ok(response_builder.error(error)?),
-                    }
-                }
-                MainPurseIdentifier::PurseUref(formatted_uref_string) => {
-                    match URef::from_formatted_str(&formatted_uref_string) {
-                        Ok(uref) => uref,
-                        Err(error_msg) => {
-                            info!("{}", error_msg);
-                            return Ok(response_builder.error(warp_json_rpc::Error::custom(
-                                ErrorCode::ParseGetBalanceURef as i64,
-                                error_msg,
-                            ))?);
-                        }
-                    }
-                }
-            };
-
-            match get_balance_result(effect_builder, state_root_hash, purse_uref, api_version).await
-            {
-                Ok(get_balance_result) => Ok(response_builder.success(get_balance_result)?),
-                Err(error) => Ok(response_builder.error(error)?),
-            }
-        }
-        .boxed()
-    }
-}
-
 type QuerySuccess = (
     DomainStoredValue,
     Vec<TrieMerkleProof<Key, DomainStoredValue>>,
@@ -1154,7 +1131,7 @@ async fn get_account<REv: ReactorEventT>(
     state_root_hash: Digest,
     account_hash: AccountHash,
 ) -> Result<JsonAccount, warp_json_rpc::Error> {
-    let (stored_value, _) = run_query_and_encode(
+    let (stored_value, _) = common::run_query_and_encode(
         effect_builder,
         state_root_hash,
         Key::Account(account_hash),
@@ -1172,61 +1149,4 @@ async fn get_account<REv: ReactorEventT>(
             error_msg,
         ))
     }
-}
-
-async fn get_balance_result<REv: ReactorEventT>(
-    effect_builder: EffectBuilder<REv>,
-    state_root_hash: Digest,
-    purse_uref: URef,
-    api_version: ProtocolVersion,
-) -> Result<GetBalanceResult, warp_json_rpc::Error> {
-    let balance_result = effect_builder
-        .make_request(
-            |responder| RpcRequest::GetBalance {
-                state_root_hash,
-                purse_uref,
-                responder,
-            },
-            QueueKind::Api,
-        )
-        .await;
-
-    let (balance_value, balance_proof) = match balance_result {
-        Ok(BalanceResult::Success { motes, proof }) => (motes, proof),
-        Ok(balance_result) => {
-            let error_msg = format!("get-balance failed: {:?}", balance_result);
-            info!("{}", error_msg);
-            return Err(warp_json_rpc::Error::custom(
-                ErrorCode::GetBalanceFailed as i64,
-                error_msg,
-            ));
-        }
-        Err(error) => {
-            let error_msg = format!("get-balance failed to execute: {}", error);
-            info!("{}", error_msg);
-            return Err(warp_json_rpc::Error::custom(
-                ErrorCode::GetBalanceFailedToExecute as i64,
-                error_msg,
-            ));
-        }
-    };
-
-    let proof_bytes = match balance_proof.to_bytes() {
-        Ok(proof_bytes) => proof_bytes,
-        Err(error) => {
-            info!("failed to encode stored value: {}", error);
-            return Err(warp_json_rpc::Error::INTERNAL_ERROR);
-        }
-    };
-
-    let merkle_proof = base16::encode_lower(&proof_bytes);
-
-    // Return the result.
-    let result = Self::ResponseResult {
-        api_version,
-        balance_value,
-        merkle_proof,
-    };
-
-    Ok(result)
 }

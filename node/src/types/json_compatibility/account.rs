@@ -65,8 +65,7 @@ pub struct Account {
 }
 
 impl Account {
-    pub(crate)     /// Returns main purse.
-    fn main_purse(&self) -> URef {
+    pub(crate) fn main_purse(&self) -> URef {
         self.main_purse
     }
 }
