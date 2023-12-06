@@ -775,9 +775,11 @@ pub struct AddressableEntity {
     named_keys: NamedKeys,
     entry_points: EntryPoints,
     protocol_version: ProtocolVersion,
+
     main_purse: URef,
     associated_keys: AssociatedKeys,
     action_thresholds: ActionThresholds,
+
     message_topics: MessageTopics,
 }
 

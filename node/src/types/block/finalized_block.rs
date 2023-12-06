@@ -65,7 +65,6 @@ static FINALIZED_BLOCK: Lazy<FinalizedBlock> = Lazy::new(|| {
         era_id,
         height,
         public_key,
-        Some(1u64)
     )
 });
 
@@ -81,6 +80,7 @@ static INTERNAL_ERA_REPORT: Lazy<InternalEraReport> = Lazy::new(|| {
     InternalEraReport {
         equivocators,
         inactive_validators,
+        new_era_gas_price: 1u64
     }
 });
 
@@ -99,7 +99,6 @@ pub struct FinalizedBlock {
     pub(crate) era_id: EraId,
     pub(crate) height: u64,
     pub(crate) proposer: Box<PublicKey>,
-    pub(crate) next_era_gas_price: Option<u64>,
 }
 
 /// `EraReport` used only internally. The one in types is a part of `EraEndV1`.
@@ -111,6 +110,8 @@ pub struct InternalEraReport {
     pub equivocators: Vec<PublicKey>,
     /// Validators that haven't produced any unit during the era.
     pub inactive_validators: Vec<PublicKey>,
+    /// The gas price for the successor era.
+    pub new_era_gas_price: u64,
 }
 
 impl FinalizedBlock {
@@ -121,7 +122,6 @@ impl FinalizedBlock {
         era_id: EraId,
         height: u64,
         proposer: PublicKey,
-        next_era_gas_price: Option<u64>
     ) -> Self {
         FinalizedBlock {
             transfer: block_payload
@@ -147,7 +147,6 @@ impl FinalizedBlock {
             era_id,
             height,
             proposer: Box::new(proposer),
-            next_era_gas_price,
         }
     }
 
@@ -158,6 +157,18 @@ impl FinalizedBlock {
             .chain(&self.staking)
             .chain(&self.install_upgrade)
             .chain(&self.standard)
+    }
+
+
+
+    pub(crate) fn era_gas_price(&self) -> Option<u64> {
+        match &self.era_report {
+            None => {None}
+            Some(era_report) => {
+                Some(era_report.new_era_gas_price)
+            }
+        }
+
     }
 
     /// Generates a random instance using a `TestRng` and includes specified deploys.
@@ -232,7 +243,6 @@ impl FinalizedBlock {
             era_id,
             height,
             public_key,
-            Some(1u64)
         )
     }
 }
@@ -261,12 +271,12 @@ impl From<BlockV2> for FinalizedBlock {
             era_report: block.era_end().map(|era_end| InternalEraReport {
                 equivocators: Vec::from(era_end.equivocators()),
                 inactive_validators: Vec::from(era_end.inactive_validators()),
+                new_era_gas_price: 1u64
             }),
             era_id: block.era_id(),
             height: block.height(),
             proposer: Box::new(block.proposer().clone()),
             rewarded_signatures: block.rewarded_signatures().clone(),
-            next_era_gas_price: Some(1u64)
         }
     }
 }
@@ -308,6 +318,7 @@ impl InternalEraReport {
         InternalEraReport {
             equivocators,
             inactive_validators,
+            new_era_gas_price: 1u64
         }
     }
 }

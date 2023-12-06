@@ -988,7 +988,7 @@ impl EraSupervisor {
         let standard_vacancy = self.chainspec.transaction_config.block_max_standard_count
             - block_payload.standard_count();
 
-        self.current_vacancy_number += (standard_vacancy + transfer_vacancy);
+        self.current_vacancy_number += standard_vacancy + transfer_vacancy;
     }
 
     fn compute_next_era_gas_price(&self, finalized_block_height: u64) -> u64 {
@@ -1176,6 +1176,8 @@ impl EraSupervisor {
                 // TODO - add support for the `compute_rewards` chainspec parameter coming from
                 // private chain implementation in the 2.0 rewards scheme.
                 let _compute_rewards = self.chainspec.core_config.compute_rewards;
+                let finalized_block_height = era.start_height + relative_height;
+                let accusations = era.accusations();
                 let report = terminal_block_data.map(|tbd| {
                     // If block rewards are disabled, zero them.
                     // if !compute_rewards {
@@ -1183,10 +1185,15 @@ impl EraSupervisor {
                     //         *reward = 0;
                     //     }
                     // }
-
+                    let new_era_gas_price = self.compute_next_era_gas_price(finalized_block_height);
+                    info!(
+                        new_era_gas_price = new_era_gas_price,
+                        "new era gas price has been calculated"
+                    );
                     InternalEraReport {
-                        equivocators: era.accusations(),
+                        equivocators: accusations,
                         inactive_validators: tbd.inactive_validators,
+                        new_era_gas_price
                     }
                 });
                 let proposed_block = Arc::try_unwrap(value).unwrap_or_else(|arc| (*arc).clone());
@@ -1195,21 +1202,15 @@ impl EraSupervisor {
                     .cloned()
                     .map(TransactionHashWithApprovals::into_hash_and_finalized_approvals)
                     .collect();
-                let finalized_block_height = era.start_height + relative_height;
                 self.update_block_vacancy(&proposed_block);
-                let next_era_gas_price = if let Some(era_report) = report.as_ref() {
-                    let next_era_gas_price = self.compute_next_era_gas_price(finalized_block_height);
+                if let Some(era_report) = report.as_ref() {
                     info!(
                         inactive = %DisplayIter::new(&era_report.inactive_validators),
                         faulty = %DisplayIter::new(&era_report.equivocators),
                         era_id = era_id.value(),
-                        next_era_gas_price = next_era_gas_price,
                         "era end: inactive and faulty validators"
                     );
-                    Some(next_era_gas_price)
-                } else {
-                    None
-                };
+                }
                 let finalized_block = FinalizedBlock::new(
                     proposed_block,
                     report,
@@ -1217,7 +1218,6 @@ impl EraSupervisor {
                     era_id,
                     finalized_block_height,
                     proposer,
-                    next_era_gas_price
                 );
                 info!(
                     era_id = finalized_block.era_id.value(),

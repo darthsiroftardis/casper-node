@@ -131,7 +131,6 @@ pub fn execute_finalized_block(
 
     // Create a new EngineState that reads from LMDB but only caches changes in memory.
     let scratch_state = engine_state.get_scratch_engine_state();
-
     // Pay out block rewards
     if let Some(rewards) = &executable_block.rewards {
         state_root_hash = scratch_state.distribute_block_rewards(
@@ -339,6 +338,7 @@ pub fn execute_finalized_block(
             Some(InternalEraReport {
                 equivocators,
                 inactive_validators,
+                new_era_gas_price
             }),
             Some(next_era_validator_weights),
         ) => Some(EraEndV2::new(
@@ -346,6 +346,7 @@ pub fn execute_finalized_block(
             inactive_validators,
             next_era_validator_weights,
             executable_block.rewards.unwrap_or_default(),
+            new_era_gas_price
         )),
         (maybe_era_report, maybe_next_era_validator_weights) => {
             return Err(BlockExecutionError::FailedToCreateEraEnd {
@@ -534,6 +535,7 @@ fn commit_step<S>(
     InternalEraReport {
         equivocators,
         inactive_validators,
+        new_era_gas_price
     }: InternalEraReport,
     era_end_timestamp_millis: u64,
     next_era_id: EraId,
@@ -557,6 +559,7 @@ where
         evict_items,
         next_era_id,
         era_end_timestamp_millis,
+        next_era_gas_price: new_era_gas_price
     };
 
     // Have the EE commit the step.

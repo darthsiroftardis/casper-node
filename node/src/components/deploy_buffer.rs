@@ -73,6 +73,7 @@ pub(crate) struct DeployBuffer {
     hold: BTreeMap<Timestamp, HashSet<DeployHash>>,
     // deploy_hashes that should not be proposed, ever
     dead: HashSet<DeployHash>,
+    current_gas_price: u64,
     // deploy buffer metrics
     #[data_size(skip)]
     metrics: Metrics,
@@ -92,6 +93,7 @@ impl DeployBuffer {
             buffer: HashMap::new(),
             hold: BTreeMap::new(),
             dead: HashSet::new(),
+            current_gas_price: transaction_config.gas_price_floor,
             metrics: Metrics::new(registry)?,
         })
     }
@@ -367,6 +369,9 @@ impl DeployBuffer {
         let block_height = finalized_block.height;
         let timestamp = finalized_block.timestamp;
         debug!(%timestamp, "DeployBuffer: register_block_finalized({}) timestamp finalized", block_height);
+        if let Some(new_gas_price) = finalized_block.era_gas_price() {
+            self.current_gas_price = new_gas_price
+        };
         self.register_deploys(
             timestamp,
             finalized_block

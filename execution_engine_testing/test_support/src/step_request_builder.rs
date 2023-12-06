@@ -15,6 +15,7 @@ pub struct StepRequestBuilder {
     run_auction: bool,
     next_era_id: EraId,
     era_end_timestamp_millis: u64,
+    new_era_gas_price: u64,
 }
 
 impl StepRequestBuilder {
@@ -86,6 +87,7 @@ impl StepRequestBuilder {
             self.evict_items,
             self.next_era_id,
             self.era_end_timestamp_millis,
+            self.new_era_gas_price
         )
     }
 }
@@ -101,6 +103,7 @@ impl Default for StepRequestBuilder {
             next_era_id: Default::default(),
             era_end_timestamp_millis: Default::default(),
             reward_items: Default::default(),
+            new_era_gas_price: 1u64,
         }
     }
 }

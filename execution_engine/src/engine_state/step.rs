@@ -80,6 +80,7 @@ pub struct StepRequest {
     pub next_era_id: EraId,
     /// Timestamp in milliseconds representing end of the current era.
     pub era_end_timestamp_millis: u64,
+    pub next_era_gas_price: u64,
 }
 
 impl StepRequest {
@@ -92,6 +93,7 @@ impl StepRequest {
         evict_items: Vec<EvictItem>,
         next_era_id: EraId,
         era_end_timestamp_millis: u64,
+        next_era_gas_price: u64,
     ) -> Self {
         Self {
             pre_state_hash,
@@ -100,6 +102,7 @@ impl StepRequest {
             evict_items,
             next_era_id,
             era_end_timestamp_millis,
+            next_era_gas_price
         }
     }
 

@@ -62,6 +62,7 @@ impl ExecutableBlock {
         let era_report = block.era_end().map(|ee| InternalEraReport {
             equivocators: ee.equivocators().into(),
             inactive_validators: ee.inactive_validators().into(),
+            new_era_gas_price: ee.new_era_gas_price()
         });
 
         Self {

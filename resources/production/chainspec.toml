@@ -146,6 +146,9 @@ block_gas_limit = 4_000_000_000_000
 native_transfer_minimum_motes = 2_500_000_000
 # The maximum value to which `transaction_acceptor.timestamp_leeway` can be set in the config.toml file.
 max_timestamp_leeway = '5 seconds'
+gas_price_floor = 1
+gas_price_ceiling = 3
+
 
 [transactions.v1]
 # The maximum length in bytes of runtime args per V1 transaction.

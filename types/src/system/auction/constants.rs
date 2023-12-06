@@ -59,6 +59,7 @@ pub const ARG_EVICTED_VALIDATORS: &str = "evicted_validators";
 /// Named constant for `rewards_map`;
 pub const ARG_REWARDS_MAP: &str = "rewards_map";
 
+
 /// Named constant for method `get_era_validators`.
 pub const METHOD_GET_ERA_VALIDATORS: &str = "get_era_validators";
 /// Named constant for method `add_bid`.
