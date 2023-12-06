@@ -63,6 +63,9 @@ pub struct TransactionConfig {
     /// Configuration values specific to V1 transactions.
     #[serde(rename = "v1")]
     pub transaction_v1_config: TransactionV1Config,
+
+    pub gas_price_floor: u64,
+    pub gas_price_ceiling: u64
 }
 
 #[cfg(any(feature = "testing", test))]
@@ -83,6 +86,8 @@ impl TransactionConfig {
         let max_timestamp_leeway = TimeDiff::from_seconds(rng.gen_range(0..6));
         let deploy_config = DeployConfig::random(rng);
         let transaction_v1_config = TransactionV1Config::random(rng);
+        let gas_price_floor = 1;
+        let gas_price_ceiling = 3;
 
         TransactionConfig {
             max_ttl,
@@ -98,6 +103,8 @@ impl TransactionConfig {
             max_timestamp_leeway,
             deploy_config,
             transaction_v1_config,
+            gas_price_floor,
+            gas_price_ceiling
         }
     }
 }
@@ -120,6 +127,8 @@ impl Default for TransactionConfig {
             max_timestamp_leeway: TimeDiff::from_str("5sec").unwrap(),
             deploy_config: DeployConfig::default(),
             transaction_v1_config: TransactionV1Config::default(),
+            gas_price_floor: 1,
+            gas_price_ceiling: 3,
         }
     }
 }
@@ -138,7 +147,9 @@ impl ToBytes for TransactionConfig {
         self.native_transfer_minimum_motes.write_bytes(writer)?;
         self.max_timestamp_leeway.write_bytes(writer)?;
         self.deploy_config.write_bytes(writer)?;
-        self.transaction_v1_config.write_bytes(writer)
+        self.transaction_v1_config.write_bytes(writer)?;
+        self.gas_price_floor.write_bytes(writer)?;
+        self.gas_price_ceiling.write_bytes(writer)
     }
 
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
@@ -161,6 +172,8 @@ impl ToBytes for TransactionConfig {
             + self.max_timestamp_leeway.serialized_length()
             + self.deploy_config.serialized_length()
             + self.transaction_v1_config.serialized_length()
+            + self.gas_price_floor.serialized_length()
+            + self.gas_price_ceiling.serialized_length()
     }
 }
 
@@ -179,6 +192,8 @@ impl FromBytes for TransactionConfig {
         let (max_timestamp_leeway, remainder) = TimeDiff::from_bytes(remainder)?;
         let (deploy_config, remainder) = DeployConfig::from_bytes(remainder)?;
         let (transaction_v1_config, remainder) = TransactionV1Config::from_bytes(remainder)?;
+        let (gas_price_floor, remainder) = u64::from_bytes(remainder)?;
+        let (gas_price_ceiling, remainder) = u64::from_bytes(remainder)?;
         let config = TransactionConfig {
             max_ttl,
             max_transaction_size,
@@ -193,6 +208,8 @@ impl FromBytes for TransactionConfig {
             max_timestamp_leeway,
             deploy_config,
             transaction_v1_config,
+            gas_price_floor,
+            gas_price_ceiling
         };
         Ok((config, remainder))
     }

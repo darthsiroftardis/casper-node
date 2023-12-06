@@ -65,6 +65,7 @@ static FINALIZED_BLOCK: Lazy<FinalizedBlock> = Lazy::new(|| {
         era_id,
         height,
         public_key,
+        Some(1u64)
     )
 });
 
@@ -98,6 +99,7 @@ pub struct FinalizedBlock {
     pub(crate) era_id: EraId,
     pub(crate) height: u64,
     pub(crate) proposer: Box<PublicKey>,
+    pub(crate) next_era_gas_price: Option<u64>,
 }
 
 /// `EraReport` used only internally. The one in types is a part of `EraEndV1`.
@@ -119,6 +121,7 @@ impl FinalizedBlock {
         era_id: EraId,
         height: u64,
         proposer: PublicKey,
+        next_era_gas_price: Option<u64>
     ) -> Self {
         FinalizedBlock {
             transfer: block_payload
@@ -144,6 +147,7 @@ impl FinalizedBlock {
             era_id,
             height,
             proposer: Box::new(proposer),
+            next_era_gas_price,
         }
     }
 
@@ -228,6 +232,7 @@ impl FinalizedBlock {
             era_id,
             height,
             public_key,
+            Some(1u64)
         )
     }
 }
@@ -261,6 +266,7 @@ impl From<BlockV2> for FinalizedBlock {
             height: block.height(),
             proposer: Box::new(block.proposer().clone()),
             rewarded_signatures: block.rewarded_signatures().clone(),
+            next_era_gas_price: Some(1u64)
         }
     }
 }

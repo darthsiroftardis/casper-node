@@ -368,6 +368,7 @@ impl MainReactor {
             era_id,
             genesis_block_height,
             PublicKey::System,
+            Some(1u64)
         );
 
         // this genesis block has no transactions, and will get
@@ -447,6 +448,7 @@ impl MainReactor {
                         header.next_block_era_id(),
                         next_block_height,
                         PublicKey::System,
+                        Some(1u64)
                     );
                     Ok(effect_builder
                         .enqueue_block_for_execution(

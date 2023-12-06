@@ -25,6 +25,7 @@ use anyhow::Error;
 use datasize::DataSize;
 use futures::{Future, FutureExt};
 use itertools::Itertools;
+use num_rational::Ratio;
 use prometheus::Registry;
 use rand::Rng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -67,6 +68,7 @@ use crate::{
 
 pub use self::era::Era;
 use crate::{components::consensus::error::CreateNewEraError, types::TransactionHashWithApprovals};
+use crate::types::BlockPayload;
 
 use super::{traits::ConsensusNetworkMessage, BlockContext};
 
@@ -111,6 +113,7 @@ pub struct EraSupervisor {
     next_block_height: u64,
     /// The height of the next block to be executed. If this falls too far behind, we pause.
     next_executed_height: u64,
+    current_vacancy_number: u32,
     #[data_size(skip)]
     metrics: Metrics,
     /// The path to the folder where unit files will be stored.
@@ -152,6 +155,7 @@ impl EraSupervisor {
             metrics,
             unit_files_folder,
             next_executed_height: 0,
+            current_vacancy_number: 0,
             last_progress: Timestamp::now(),
             message_delay_failpoint: Failpoint::new("consensus.message_delay"),
         };
@@ -631,6 +635,9 @@ impl EraSupervisor {
             }
         }
 
+        // Reset the consumption rate back to 0
+        self.current_vacancy_number = 0;
+
         Ok((era_id, outcomes))
     }
 
@@ -973,6 +980,44 @@ impl EraSupervisor {
         self.open_eras.get_mut(&era_id).unwrap()
     }
 
+
+    fn update_block_vacancy(&mut self, block_payload: &BlockPayload) {
+        let transfer_vacancy = self.chainspec.transaction_config.block_max_transfer_count
+            - block_payload.transfer_count();
+
+        let standard_vacancy = self.chainspec.transaction_config.block_max_standard_count
+            - block_payload.standard_count();
+
+        self.current_vacancy_number += (standard_vacancy + transfer_vacancy);
+    }
+
+    fn compute_next_era_gas_price(&self, finalized_block_height: u64) -> u64 {
+        if let Some((_, era))  = self.open_eras().last_key_value() {
+            let number_of_blocks = finalized_block_height - era.start_height;
+
+            let max_block_capacity = self.chainspec.transaction_config.block_max_standard_count + self.chainspec.transaction_config.block_max_transfer_count;
+
+            let max_era_capcacity = max_block_capacity as u64 * number_of_blocks;
+
+            let current_consumption = (max_era_capcacity)
+                - self.current_vacancy_number as u64;
+
+            let consumption_rate = Ratio::new(current_consumption * 100, max_era_capcacity);
+
+            return match consumption_rate.to_integer() {
+                0..=33 => self.chainspec.transaction_config.gas_price_floor,
+                67..=100 => self.chainspec.transaction_config.gas_price_ceiling,
+                34..=66 => Ratio::new(self.chainspec.transaction_config.gas_price_floor + self.chainspec.transaction_config.gas_price_ceiling, 2)
+                    .to_integer(),
+                _ => {
+                    panic!("Out of range")
+                }
+            }
+        } else {
+            self.chainspec.transaction_config.gas_price_floor
+        }
+    }
+
     #[allow(clippy::integer_arithmetic)] // Block height should never reach u64::MAX.
     fn handle_consensus_outcome<REv: ReactorEventT>(
         &mut self,
@@ -1150,21 +1195,29 @@ impl EraSupervisor {
                     .cloned()
                     .map(TransactionHashWithApprovals::into_hash_and_finalized_approvals)
                     .collect();
-                if let Some(era_report) = report.as_ref() {
+                let finalized_block_height = era.start_height + relative_height;
+                self.update_block_vacancy(&proposed_block);
+                let next_era_gas_price = if let Some(era_report) = report.as_ref() {
+                    let next_era_gas_price = self.compute_next_era_gas_price(finalized_block_height);
                     info!(
                         inactive = %DisplayIter::new(&era_report.inactive_validators),
                         faulty = %DisplayIter::new(&era_report.equivocators),
                         era_id = era_id.value(),
+                        next_era_gas_price = next_era_gas_price,
                         "era end: inactive and faulty validators"
                     );
-                }
+                    Some(next_era_gas_price)
+                } else {
+                    None
+                };
                 let finalized_block = FinalizedBlock::new(
                     proposed_block,
                     report,
                     timestamp,
                     era_id,
-                    era.start_height + relative_height,
+                    finalized_block_height,
                     proposer,
+                    next_era_gas_price
                 );
                 info!(
                     era_id = finalized_block.era_id.value(),

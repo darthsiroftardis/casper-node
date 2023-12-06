@@ -237,6 +237,7 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
             EraId::new(0),
             0,
             PublicKey::System,
+            Some(1u64)
         ),
         vec![],
     );
@@ -257,6 +258,7 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
             EraId::new(1),
             1,
             PublicKey::System,
+            None
         ),
         vec![],
     );
@@ -342,6 +344,7 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
             EraId::new(1),
             2,
             PublicKey::System,
+            None
         ),
         txns,
     );

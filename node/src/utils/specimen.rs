@@ -729,6 +729,7 @@ impl LargestSpecimen for FinalizedBlock {
             LargestSpecimen::largest_specimen(estimator, cache),
             LargestSpecimen::largest_specimen(estimator, cache),
             LargestSpecimen::largest_specimen(estimator, cache),
+            LargestSpecimen::largest_specimen(estimator, cache),
         )
     }
 }

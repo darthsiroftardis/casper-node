@@ -56,6 +56,14 @@ impl BlockPayload {
         self.transfer.iter()
     }
 
+    pub(crate) fn transfer_count(&self) -> u32 {
+        self.transfer.len() as u32
+    }
+
+    pub(crate) fn standard_count(&self) -> u32 {
+        self.standard.len() as u32
+    }
+
     /// Returns the hashes and approvals of the non-transfer, native transactions within the block.
     pub fn staking(&self) -> impl Iterator<Item = &TransactionHashWithApprovals> {
         self.staking.iter()
