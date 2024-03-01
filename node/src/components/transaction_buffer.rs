@@ -254,7 +254,7 @@ impl TransactionBuffer {
     fn register_block_proposed(&mut self, proposed_block: ProposedBlock<ClContext>) {
         let timestamp = &proposed_block.context().timestamp();
         if let Some(hold_set) = self.hold.get_mut(timestamp) {
-            debug!(%timestamp, "TransactionBuffer: existing hold timestamp extended");
+            info!(%timestamp, "TransactionBuffer: existing hold timestamp extended");
             hold_set.extend(
                 proposed_block
                     .value()
@@ -262,7 +262,7 @@ impl TransactionBuffer {
                     .map(|(transaction_hash, _)| *transaction_hash),
             );
         } else {
-            debug!(%timestamp, "TransactionBuffer: new hold timestamp inserted");
+            info!(%timestamp, "TransactionBuffer: new hold timestamp inserted");
             self.hold.insert(
                 *timestamp,
                 HashSet::from_iter(
@@ -672,6 +672,7 @@ where
                     Effects::new()
                 }
                 Event::BlockProposed(proposed) => {
+                    warn!("registering proposed block");
                     self.register_block_proposed(*proposed);
                     Effects::new()
                 }

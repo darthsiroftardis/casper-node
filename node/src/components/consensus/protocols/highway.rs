@@ -297,6 +297,7 @@ impl<C: Context + 'static> HighwayProtocol<C> {
             None => return outcomes,
             Some(pending_vertex) => pending_vertex,
         };
+        info!(?pending_vertex, "invalid vertex");
 
         // If unit is sent by a doppelganger, deactivate this instance of an active
         // validator. Continue processing the unit so that it can be added to the state.

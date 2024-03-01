@@ -28,7 +28,7 @@ use std::{
 use datasize::DataSize;
 use derive_more::From;
 use serde::{Deserialize, Serialize};
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 
 use casper_types::{BlockHash, BlockHeader, EraId, Timestamp};
 
@@ -454,6 +454,7 @@ where
                 auto_closing_responder,
             }) => self.handle_demand(effect_builder, rng, sender, demand, auto_closing_responder),
             Event::NewBlockPayload(new_block_payload) => {
+                warn!("handling new block payload");
                 self.handle_new_block_payload(effect_builder, rng, new_block_payload)
             }
             Event::BlockAdded {

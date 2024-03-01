@@ -17,6 +17,7 @@ use crate::{
     effect::Responder,
     types::{appendable_block::AppendableBlock, NodeId, TransactionFootprint},
 };
+use crate::components::block_validator::state::BlockValidationState::Initialize;
 
 /// The state of a peer which claims to be a holder of the deploys.
 #[derive(Clone, Copy, Eq, PartialEq, DataSize, Debug)]
@@ -81,6 +82,18 @@ impl ApprovalInfo {
 /// result.
 #[derive(DataSize, Debug)]
 pub(super) enum BlockValidationState {
+    Initialize {
+        appendable_block: AppendableBlock,
+        /// The set of approvals contains approvals from transactions that would be finalized with
+        /// the block.
+        missing_transactions: HashMap<TransactionHash, ApprovalInfo>,
+        /// The set of finality signatures for past blocks cited in this block.
+        missing_signatures: HashSet<FinalitySignatureId>,
+        /// The set of peers which each claim to hold all the transactions.
+        holders: HashMap<NodeId, HolderState>,
+        /// A list of responders that are awaiting an answer.
+        responders: Vec<Responder<bool>>,
+    },
     /// The validity is not yet decided.
     InProgress {
         /// Appendable block ensuring that the transactions satisfy the validity conditions.
@@ -104,6 +117,7 @@ pub(super) enum BlockValidationState {
     /// more peers to ask, since more peers could be provided before this `BlockValidationState` is
     /// purged.
     Invalid(Timestamp),
+
 }
 
 impl BlockValidationState {
@@ -125,10 +139,13 @@ impl BlockValidationState {
         //     return (state, Some(responder));
         // }
 
+        println!("creating new BV state");
+
         if Self::validate_transaction_category_counts(proposed_block, &chainspec.transaction_config)
             .is_err()
         {
             let state = BlockValidationState::Invalid(proposed_block.timestamp());
+            println!("Invalid");
             return (state, Some(responder));
         }
 
@@ -157,6 +174,8 @@ impl BlockValidationState {
                 },
             };
 
+            println!("{:?}", approval_info);
+
             if missing_transactions
                 .insert(*transaction_hash, approval_info)
                 .is_some()
@@ -167,7 +186,10 @@ impl BlockValidationState {
             }
         }
 
-        let state = BlockValidationState::InProgress {
+        println!("Setting initial state");
+        println!("Missing txn count {:?}", missing_transactions);
+
+        let state = BlockValidationState::Initialize {
             appendable_block,
             missing_transactions,
             missing_signatures,
@@ -209,6 +231,10 @@ impl BlockValidationState {
     /// the value which should be provided to the responder.
     pub(super) fn add_responder(&mut self, responder: Responder<bool>) -> AddResponderResult {
         match self {
+            BlockValidationState::Initialize { responders, ..} => {
+                responders.push(responder);
+                AddResponderResult::Added
+            }
             BlockValidationState::InProgress { responders, .. } => {
                 responders.push(responder);
                 AddResponderResult::Added
@@ -244,7 +270,7 @@ impl BlockValidationState {
                     entry.insert(HolderState::Unasked);
                 }
             },
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
+            BlockValidationState::Initialize {..} | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
                 error!(state = %self, "unexpected state when adding holder");
             }
         }
@@ -269,8 +295,28 @@ impl BlockValidationState {
     ///   * if `Valid` or `Invalid`, returns `ValidationSucceeded` or `ValidationFailed`
     ///     respectively
     pub(super) fn start_fetching(&mut self) -> MaybeStartFetching {
-        println!("fetching?");
         match self {
+            BlockValidationState::Initialize {
+                appendable_block,
+                missing_transactions,
+                missing_signatures, holders, responders,
+            } => {
+                if missing_transactions.is_empty() && missing_signatures.is_empty() {
+                    *self = BlockValidationState::Valid(appendable_block.timestamp());
+                    MaybeStartFetching::ValidationSucceeded
+                } else {
+                    println!("Switching to InProgress");
+                    println!("{:?}", missing_transactions);
+                    *self = BlockValidationState::InProgress {
+                        appendable_block: appendable_block.to_owned(),
+                        missing_transactions: missing_transactions.to_owned(),
+                        missing_signatures: missing_signatures.to_owned(),
+                        holders: holders.to_owned(),
+                        responders: mem::take(responders),
+                    };
+                    self.start_fetching()
+                }
+            }
             BlockValidationState::InProgress {
                 missing_transactions,
                 missing_signatures,
@@ -321,7 +367,7 @@ impl BlockValidationState {
     pub(super) fn take_responders(&mut self) -> Vec<Responder<bool>> {
         match self {
             BlockValidationState::InProgress { responders, .. } => mem::take(responders),
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => vec![],
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => vec![],
         }
     }
 
@@ -380,7 +426,7 @@ impl BlockValidationState {
                     }
                 }
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
         };
         *self = new_state;
         responders
@@ -418,7 +464,7 @@ impl BlockValidationState {
                     return vec![];
                 }
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
         };
         *self = new_state;
         responders
@@ -442,7 +488,7 @@ impl BlockValidationState {
                 }
                 (appendable_block.timestamp(), mem::take(responders))
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
+            BlockValidationState::Initialize {..} | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
         };
         *self = BlockValidationState::Invalid(timestamp);
         responders
@@ -466,7 +512,7 @@ impl BlockValidationState {
                 }
                 (appendable_block.timestamp(), mem::take(responders))
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => return vec![],
+            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) | BlockValidationState::Initialize { .. } => return vec![],
         };
         *self = BlockValidationState::Invalid(timestamp);
         responders
@@ -474,7 +520,7 @@ impl BlockValidationState {
 
     pub(super) fn block_timestamp_if_completed(&self) -> Option<Timestamp> {
         match self {
-            BlockValidationState::InProgress { .. } => None,
+            BlockValidationState::InProgress { .. } | BlockValidationState::Initialize { .. }=> None,
             BlockValidationState::Valid(timestamp) | BlockValidationState::Invalid(timestamp) => {
                 Some(*timestamp)
             }
@@ -494,7 +540,7 @@ impl BlockValidationState {
                     TransactionHash::V1(v1) => TransactionHash::V1(*v1),
                 })
                 .collect(),
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => vec![],
+            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) | BlockValidationState::Initialize {..}=> vec![],
         }
     }
 
@@ -502,7 +548,7 @@ impl BlockValidationState {
     pub(super) fn holders_mut(&mut self) -> Option<&mut HashMap<NodeId, HolderState>> {
         match self {
             BlockValidationState::InProgress { holders, .. } => Some(holders),
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => None,
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => None,
         }
     }
 
@@ -510,7 +556,7 @@ impl BlockValidationState {
     pub(super) fn responder_count(&self) -> usize {
         match self {
             BlockValidationState::InProgress { responders, .. } => responders.len(),
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => 0,
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => 0,
         }
     }
 
@@ -546,6 +592,18 @@ impl Display for BlockValidationState {
             }
             BlockValidationState::Invalid(timestamp) => {
                 write!(formatter, "BlockValidationState::Invalid({timestamp})")
+            }
+            Initialize { appendable_block, missing_transactions, missing_signatures, holders, responders } => {
+                write!(
+                    formatter,
+                    "BlockValidationState::InProgress({}, {} missing transactions, \
+                    {} missing signatures, {} holders, {} responders)",
+                    appendable_block,
+                    missing_transactions.len(),
+                    missing_signatures.len(),
+                    holders.len(),
+                    responders.len()
+                )
             }
         }
     }
@@ -739,7 +797,7 @@ mod tests {
                 assert_eq!(holders.values().next().unwrap(), &HolderState::Unasked);
                 assert_eq!(responders.len(), 1);
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
                 panic!("unexpected state")
             }
         }
@@ -1094,7 +1152,7 @@ mod tests {
                 missing_transactions.clone(),
                 holders.clone(),
             ),
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
+            Initialize {..} | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
                 panic!("unexpected state")
             }
         };
@@ -1122,7 +1180,7 @@ mod tests {
                 assert_eq!(&missing_transactions_before, missing_deploys);
                 assert_eq!(&holders_before, holders);
             }
-            BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
+            BlockValidationState::Initialize { .. } | BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => {
                 panic!("unexpected state")
             }
         };

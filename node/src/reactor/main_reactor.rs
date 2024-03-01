@@ -1,3 +1,4 @@
+
 //! Main reactor for nodes.
 
 mod config;
@@ -218,7 +219,7 @@ impl reactor::Reactor for MainReactor {
             ),
 
             MainEvent::FatalAnnouncement(fatal_ann) => {
-                if self.consensus.is_active_validator() {
+                if false && self.consensus.is_active_validator() {
                     warn!(%fatal_ann, "consensus is active, not shutting down");
                     Effects::new()
                 } else {

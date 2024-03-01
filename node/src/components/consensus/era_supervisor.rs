@@ -657,13 +657,17 @@ impl EraSupervisor {
             &mut NodeRng,
         ) -> Vec<ProtocolOutcome<ClContext>>,
     {
+        warn!("in delegate in era");
         match self.open_eras.get_mut(&era_id) {
             None => {
+                warn!("None delegate in era");
                 self.log_missing_era(era_id);
                 Effects::new()
             }
             Some(era) => {
+                warn!("Some delegate in era");
                 let outcomes = f(&mut *era.consensus, rng);
+                warn!("{:?}", outcomes);
                 self.handle_consensus_outcomes(effect_builder, rng, era_id, outcomes)
             }
         }
@@ -811,6 +815,7 @@ impl EraSupervisor {
                     return Effects::new();
                 }
                 let proposed_block = ProposedBlock::new(block_payload, block_context);
+                warn!("delegating to era");
                 self.delegate_to_era(effect_builder, rng, era_id, move |consensus, _| {
                     consensus.propose(proposed_block, Timestamp::now())
                 })
@@ -950,6 +955,7 @@ impl EraSupervisor {
     where
         T: IntoIterator<Item = ProtocolOutcome<ClContext>>,
     {
+        warn!("handle_consensus_outcomes plural");
         outcomes
             .into_iter()
             .flat_map(|result| self.handle_consensus_outcome(effect_builder, rng, era_id, result))
@@ -981,6 +987,7 @@ impl EraSupervisor {
         era_id: EraId,
         consensus_result: ProtocolOutcome<ClContext>,
     ) -> Effects<Event> {
+        warn!("handling single outcome");
         let current_era = match self.current_era() {
             Some(current_era) => current_era,
             None => {
@@ -988,6 +995,7 @@ impl EraSupervisor {
                 return Effects::new();
             }
         };
+        warn!("{:?} inside function call", consensus_result);
         match consensus_result {
             ProtocolOutcome::Disconnect(sender) => {
                 warn!(
@@ -1066,6 +1074,7 @@ impl EraSupervisor {
 
                 let awaitable_appendable_block =
                     effect_builder.request_appendable_block(block_context.timestamp());
+                warn!("Got appendable block");
                 let awaitable_blocks_with_metadata = async move {
                     effect_builder
                         .collect_past_blocks_with_metadata(
@@ -1093,6 +1102,9 @@ impl EraSupervisor {
                             &block_context,
                             signature_rewards_max_delay,
                         );
+
+                        let transactions = appendable_block.transaction_hashes();
+                        warn!("{:?}", transactions);
 
                         let block_payload = Arc::new(appendable_block.into_block_payload(
                             accusations,
@@ -1187,9 +1199,11 @@ impl EraSupervisor {
                 sender,
                 proposed_block,
             } => {
+                warn!("validate {:?}", proposed_block);
                 if era_id.saturating_add(PAST_EVIDENCE_ERAS) < current_era
                     || !self.open_eras.contains_key(&era_id)
                 {
+                    warn!("Outdated era");
                     return Effects::new(); // Outdated era; we don't need the value anymore.
                 }
                 let missing_evidence: Vec<PublicKey> = proposed_block
@@ -1201,8 +1215,8 @@ impl EraSupervisor {
                     .collect();
                 self.era_mut(era_id)
                     .add_block(proposed_block.clone(), missing_evidence.clone());
-                if let Some(deploy_hash) = proposed_block.contains_replay() {
-                    info!(%sender, %deploy_hash, "block contains a replayed deploy");
+                if let Some(transaction_hash) = proposed_block.contains_replay() {
+                    info!(%sender, %transaction_hash, "block contains a replayed transaction");
                     return self.resolve_validity(
                         effect_builder,
                         rng,
@@ -1221,6 +1235,7 @@ impl EraSupervisor {
                 }
                 let proposed_block_height =
                     self.proposed_block_height(proposed_block.context(), era_id);
+                warn!("checking for txn replay and validation");
                 effects.extend(
                     async move {
                         check_txns_for_replay_in_previous_eras_and_validate_block(
@@ -1236,9 +1251,12 @@ impl EraSupervisor {
                 );
                 effects
             }
-            ProtocolOutcome::HandledProposedBlock(proposed_block) => effect_builder
-                .announce_proposed_block(proposed_block)
-                .ignore(),
+            ProtocolOutcome::HandledProposedBlock(proposed_block) => {
+                warn!("announcing proposed block");
+                effect_builder
+                    .announce_proposed_block(proposed_block)
+                    .ignore()
+            },
             ProtocolOutcome::NewEvidence(pub_key) => {
                 info!(%pub_key, era = era_id.value(), "validator equivocated");
                 let mut effects = effect_builder
@@ -1373,13 +1391,16 @@ impl SerializedMessage {
 async fn get_transactions<REv>(
     effect_builder: EffectBuilder<REv>,
     hashes: Vec<TransactionHash>,
-) -> Option<Vec<Transaction>>
+) -> Vec<Transaction>
 where
     REv: From<StorageRequest>,
 {
+    let mut ret = vec![];
+    if hashes.is_empty() {
+        return ret;
+    }
     let from_storage = effect_builder.get_transactions_from_storage(hashes).await;
 
-    let mut ret = vec![];
     for item in from_storage {
         match item {
             Some((transaction, Some(approvals))) => {
@@ -1392,11 +1413,7 @@ where
         }
     }
 
-    if ret.is_empty() {
-        None
-    } else {
-        Some(ret)
-    }
+    ret
 }
 
 async fn execute_finalized_block<REv>(
@@ -1412,23 +1429,11 @@ async fn execute_finalized_block<REv>(
             .await;
     }
     // Get all transactions in order they appear in the finalized block.
-    let transactions = match get_transactions(
+    let transactions = get_transactions(
         effect_builder,
         finalized_block.all_transactions().copied().collect(),
     )
-    .await
-    {
-        Some(transactions) => transactions,
-        None => {
-            fatal!(
-                effect_builder,
-                "Could not fetch transactions for finalized block: {:?}",
-                finalized_block
-            )
-            .await;
-            return;
-        }
-    };
+    .await;
 
     let executable_block =
         ExecutableBlock::from_finalized_block_and_transactions(finalized_block, transactions);
@@ -1487,6 +1492,7 @@ where
     }
 
     let sender_for_validate_block: NodeId = sender;
+    warn!("validating block now");
     let valid = effect_builder
         .validate_block(
             sender_for_validate_block,

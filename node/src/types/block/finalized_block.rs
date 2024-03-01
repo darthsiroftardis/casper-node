@@ -44,9 +44,9 @@ static FINALIZED_BLOCK: Lazy<FinalizedBlock> = Lazy::new(|| {
     let approval = Approval::create(&transaction_hash, secret_key);
     let mut approvals = BTreeSet::new();
     approvals.insert(approval);
-    let transfer = (transaction_hash, approvals);
+    let mint = (transaction_hash, approvals);
     let mut transactions = BTreeMap::new();
-    transactions.insert(TransactionCategory::Mint, vec![transfer]);
+    transactions.insert(TransactionCategory::Mint, vec![mint]);
     let random_bit = true;
     let block_payload = BlockPayload::new(transactions, vec![], rewarded_signatures, random_bit);
     let era_report = Some(InternalEraReport::doc_example().clone());
@@ -83,8 +83,8 @@ static INTERNAL_ERA_REPORT: Lazy<InternalEraReport> = Lazy::new(|| {
 /// and before execution happened yet.
 #[derive(Clone, DataSize, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FinalizedBlock {
-    pub(crate) transfer: Vec<TransactionHash>,
-    pub(crate) staking: Vec<TransactionHash>,
+    pub(crate) mint: Vec<TransactionHash>,
+    pub(crate) auction: Vec<TransactionHash>,
     pub(crate) install_upgrade: Vec<TransactionHash>,
     pub(crate) standard: Vec<TransactionHash>,
     pub(crate) rewarded_signatures: RewardedSignatures,
@@ -117,8 +117,8 @@ impl FinalizedBlock {
         proposer: PublicKey,
     ) -> Self {
         FinalizedBlock {
-            transfer: block_payload.mint().map(|(x, _)| x).copied().collect(),
-            staking: block_payload.auction().map(|(x, _)| x).copied().collect(),
+            mint: block_payload.mint().map(|(x, _)| x).copied().collect(),
+            auction: block_payload.auction().map(|(x, _)| x).copied().collect(),
             install_upgrade: block_payload
                 .install_upgrade()
                 .map(|(x, _)| x)
@@ -135,16 +135,16 @@ impl FinalizedBlock {
         }
     }
 
-    /// The list of deploy hashes chained with the list of transfer hashes.
+    /// The list of all transaction hashes.
     pub(crate) fn all_transactions(&self) -> impl Iterator<Item = &TransactionHash> {
-        self.transfer
+        self.mint
             .iter()
-            .chain(&self.staking)
+            .chain(&self.auction)
             .chain(&self.install_upgrade)
             .chain(&self.standard)
     }
 
-    /// Generates a random instance using a `TestRng` and includes specified deploys.
+    /// Generates a random instance using a `TestRng` and includes specified transactions.
     #[cfg(test)]
     pub(crate) fn random<'a, I: IntoIterator<Item = &'a Transaction>>(
         rng: &mut TestRng,
@@ -165,7 +165,7 @@ impl FinalizedBlock {
     }
 
     /// Generates a random instance using a `TestRng`, but using the specified values.
-    /// If `deploy` is `None`, random deploys will be generated, otherwise, the provided `deploy`
+    /// If `transaction` is `None`, random transactions will be generated, otherwise, the provided `transaction`
     /// will be used.
     #[cfg(test)]
     pub(crate) fn random_with_specifics<'a, I: IntoIterator<Item = &'a Transaction>>(
@@ -221,8 +221,8 @@ impl DocExample for InternalEraReport {
 impl From<BlockV2> for FinalizedBlock {
     fn from(block: BlockV2) -> Self {
         FinalizedBlock {
-            transfer: block.transfer().copied().collect(),
-            staking: block.staking().copied().collect(),
+            mint: block.mint().copied().collect(),
+            auction: block.auction().copied().collect(),
             install_upgrade: block.install_upgrade().copied().collect(),
             standard: block.standard().copied().collect(),
             timestamp: block.timestamp(),
@@ -243,13 +243,13 @@ impl Display for FinalizedBlock {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "finalized block #{} in {}, timestamp {}, {} transfers, {} staking txns, {} \
+            "finalized block #{} in {}, timestamp {}, {} mint, {} auction txns, {} \
             install/upgrade txns, {} standard txns",
             self.height,
             self.era_id,
             self.timestamp,
-            self.transfer.len(),
-            self.staking.len(),
+            self.mint.len(),
+            self.auction.len(),
             self.install_upgrade.len(),
             self.standard.len(),
         )?;

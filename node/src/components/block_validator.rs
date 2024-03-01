@@ -19,7 +19,7 @@ use std::{
 };
 
 use datasize::DataSize;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use casper_types::{
     Approval, ApprovalsHash, Chainspec, EraId, FinalitySignature, FinalitySignatureId, PublicKey,
@@ -811,7 +811,7 @@ where
     ) -> Effects<Self::Event> {
         match event {
             Event::Request(request) => {
-                debug!(block = ?request.block, "validating proposed block");
+                info!(block = ?request.block, "validating proposed block");
                 match self.try_handle_as_existing_request(effect_builder, request) {
                     MaybeHandled::Handled(effects) => effects,
                     MaybeHandled::NotHandled(request) => {

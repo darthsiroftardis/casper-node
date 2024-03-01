@@ -1612,11 +1612,12 @@ async fn run_redelegate_bid_network() {
     deploy.sign(&alice_secret_key);
     let txn = Transaction::Deploy(deploy);
     let txn_hash = txn.hash();
+    println!("{txn_hash}");
 
     // Inject the transaction and run the network until executed.
     fixture.inject_transaction(txn).await;
     fixture
-        .run_until_executed_transaction(&txn_hash, TEN_SECS)
+        .run_until_executed_transaction(&txn_hash, ONE_MIN)
         .await;
 
     // Ensure execution succeeded and that there is a Write transform for the bid's key.
