@@ -176,6 +176,13 @@ impl Chainspec {
             fee_handling,
         ))
     }
+
+
+    #[cfg(test)]
+    pub fn with_transaction_config(mut self, transaction_config: TransactionConfig) -> Self {
+        self.transaction_config = transaction_config;
+        self
+    }
 }
 
 #[cfg(any(feature = "testing", test))]

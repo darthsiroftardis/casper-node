@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use std::hash::Hash;
 
 use derive_more::From;
 use itertools::Itertools;
@@ -112,19 +113,21 @@ impl MockReactor {
 
 pub(super) fn new_proposed_block(
     timestamp: Timestamp,
-    transfer: Vec<TransactionHashWithApprovals>,
-    staking: Vec<TransactionHashWithApprovals>,
-    install_upgrade: Vec<TransactionHashWithApprovals>,
-    standard: Vec<TransactionHashWithApprovals>,
+    transfer: Vec<Transaction>,
+    staking: Vec<Transaction>,
+    install_upgrade: Vec<Transaction>,
+    standard: Vec<Transaction>,
 ) -> ProposedBlock<ClContext> {
     // Accusations and ancestors are empty, and the random bit is always true:
     // These values are not checked by the block validator.
     let block_context = BlockContext::new(timestamp, vec![]);
+    let mut transactions: BTreeMap<TransactionCategory, Vec<(TransactionHash, BTreeSet<Approval>)>> = BTreeMap::new();
+    transactions.insert(TransactionCategory::Mint, transfer.iter().map(|mint|{ (mint.hash(), BTreeSet::new())}).collect());
+    transactions.insert(TransactionCategory::Auction, staking.iter().map(|staking|{ (staking.hash(), BTreeSet::new())}).collect());
+    transactions.insert(TransactionCategory::InstallUpgrade, install_upgrade.iter().map(|i_u|{ (i_u.hash(), BTreeSet::new())}).collect());
+    transactions.insert(TransactionCategory::Standard, standard.iter().map(|txn|{ (txn.hash(), BTreeSet::new())}).collect());
     let block_payload = BlockPayload::new(
-        transfer,
-        staking,
-        install_upgrade,
-        standard,
+        transactions,
         vec![],
         Default::default(),
         true,
@@ -260,28 +263,12 @@ async fn validate_block(
     installs_upgrades: Vec<Transaction>,
 ) -> bool {
     // Assemble the block to be validated.
-    let transfers_for_block = transfers
-        .iter()
-        .map(|transaction| TransactionHashWithApprovals::from(&transaction.clone()))
-        .collect_vec();
-    let standards_for_block = standards
-        .iter()
-        .map(|transaction| TransactionHashWithApprovals::from(&transaction.clone()))
-        .collect_vec();
-    let stakings_for_block = stakings
-        .iter()
-        .map(|transaction| TransactionHashWithApprovals::from(&transaction.clone()))
-        .collect_vec();
-    let installs_upgrades_for_block = installs_upgrades
-        .iter()
-        .map(|transaction| TransactionHashWithApprovals::from(&transaction.clone()))
-        .collect_vec();
     let proposed_block = new_proposed_block(
         timestamp,
-        transfers_for_block,
-        stakings_for_block,
-        installs_upgrades_for_block,
-        standards_for_block,
+        transfers,
+        stakings,
+        installs_upgrades,
+        standards,
     );
 
     // Create the reactor and component.
@@ -576,7 +563,7 @@ async fn should_fetch_from_multiple_peers() {
         let peer_count = 3;
         let mut rng = TestRng::new();
         let ttl = TimeDiff::from_seconds(200);
-        let transactions = (0..peer_count)
+        let standard = (0..peer_count)
             .map(|i| new_non_transfer(&mut rng, (900 + i).into(), ttl))
             .collect_vec();
         let transfers = (0..peer_count)
@@ -584,20 +571,12 @@ async fn should_fetch_from_multiple_peers() {
             .collect_vec();
 
         // Assemble the block to be validated.
-        let transfers_for_block = transfers
-            .iter()
-            .map(|transfer| TransactionHashWithApprovals::from(&transfer.clone()))
-            .collect_vec();
-        let standard_for_block = transactions
-            .iter()
-            .map(|transaction| TransactionHashWithApprovals::from(&transaction.clone()))
-            .collect_vec();
         let proposed_block = new_proposed_block(
             1100.into(),
-            transfers_for_block,
+            transfers,
             vec![],
             vec![],
-            standard_for_block,
+            standard,
         );
 
         // Create the reactor and component.
@@ -642,10 +621,10 @@ async fn should_fetch_from_multiple_peers() {
         let fetch_results = fetch_effects.drain(..).map(tokio::spawn).collect_vec();
 
         // Provide the first transaction and transfer on first asking.
-        let transactions_to_fetch = vec![transactions[0].clone(), transfers[0].clone()];
+        let transactions_to_fetch = vec![standard[0].clone(), transfers[0].clone()];
         let transactions_to_not_fetch = vec![
-            transactions[1].hash(),
-            transactions[2].hash(),
+            standard[1].hash(),
+            standard[2].hash(),
             transfers[1].hash(),
             transfers[2].hash(),
         ]
@@ -682,16 +661,16 @@ async fn should_fetch_from_multiple_peers() {
         // Provide the first and second transactions and transfers which haven't already been
         // fetched on second asking.
         let transactions_to_fetch = vec![
-            &transactions[0],
-            &transactions[1],
+            &standard[0],
+            &standard[1],
             &transfers[0],
             &transfers[1],
         ]
         .into_iter()
-        .filter(|transaction| missing.contains(&transaction.hash()))
+        .filter(|transaction| missing.contains(*transaction.hash()))
         .cloned()
         .collect();
-        let transactions_to_not_fetch = vec![transactions[2].hash(), transfers[2].hash()]
+        let transactions_to_not_fetch = vec![standard[2].hash(), transfers[2].hash()]
             .into_iter()
             .filter(|transaction_hash| missing.contains(transaction_hash))
             .collect();
@@ -724,7 +703,7 @@ async fn should_fetch_from_multiple_peers() {
         let fetch_results = fetch_effects.into_iter().map(tokio::spawn).collect_vec();
 
         // Provide all transactions and transfers not already fetched on third asking.
-        let transactions_to_fetch = transactions
+        let transactions_to_fetch = standard
             .iter()
             .chain(transfers.iter())
             .filter(|transaction| missing.contains(&transaction.hash()))

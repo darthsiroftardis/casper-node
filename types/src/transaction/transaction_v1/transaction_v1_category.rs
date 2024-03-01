@@ -5,6 +5,10 @@ use datasize::DataSize;
 #[cfg(feature = "json-schema")]
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "testing", test))]
+use rand::Rng;
+#[cfg(any(feature = "testing", test))]
+use crate::testing::TestRng;
 
 /// The category of a Transaction.
 #[derive(
@@ -28,6 +32,21 @@ pub enum TransactionCategory {
     Auction = 2,
     /// Install or Upgrade.
     InstallUpgrade = 3,
+}
+
+
+impl TransactionCategory {
+    /// Returns a random `NetworkConfig`.
+    #[cfg(any(feature = "testing", test))]
+    pub fn random(rng: &mut TestRng) -> Self {
+        match rng.gen_range(0..4) {
+            0 => Self::Standard,
+            1 => Self::Mint,
+            2 => Self::Auction,
+            3 => Self::InstallUpgrade,
+            _ => unreachable!()
+        }
+    }
 }
 
 impl fmt::Display for TransactionCategory {

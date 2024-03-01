@@ -736,7 +736,8 @@ fn make_engine_config(
     old_system_config: SystemConfig,
 ) -> EngineConfig {
     let new_system_config = SystemConfig::new(
-        old_system_config.wasmless_mint_cost(),
+        old_system_config.install_upgrade_limit(),
+        old_system_config.standard_transaction_limit(),
         *old_system_config.auction_costs(),
         new_mint_costs,
         *old_system_config.handle_payment_costs(),

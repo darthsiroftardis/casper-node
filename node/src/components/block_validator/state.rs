@@ -118,11 +118,11 @@ impl BlockValidationState {
         responder: Responder<bool>,
         chainspec: &Chainspec,
     ) -> (Self, Option<Responder<bool>>) {
-        let transaction_count = proposed_block.transaction_count();
-        if transaction_count == 0 {
-            let state = BlockValidationState::Valid(proposed_block.timestamp());
-            return (state, Some(responder));
-        }
+        // let transaction_count = proposed_block.transaction_count();
+        // if transaction_count == 0 {
+        //     let state = BlockValidationState::Valid(proposed_block.timestamp());
+        //     return (state, Some(responder));
+        // }
 
         if Self::validate_transaction_category_counts(proposed_block, &chainspec.transaction_config)
             .is_err()
@@ -337,10 +337,14 @@ impl BlockValidationState {
                 responders,
                 ..
             } => {
+                if missing_transactions.is_empty() {
+                    let new_state = BlockValidationState::Valid(appendable_block.timestamp());
+                    (new_state, mem::take(responders));
+                }
                 let approvals_info = match missing_transactions.remove(transaction_hash) {
                     Some(info) => info,
                     None => {
-                        // If this deploy is not present, just return.
+                        // If this transaction is not present, just return.
                         return vec![];
                     }
                 };
@@ -484,8 +488,8 @@ impl BlockValidationState {
             } => missing_transactions
                 .keys()
                 .map(|dt_hash| match dt_hash {
-                    TransactionHash::Deploy(deploy) => deploy.deploy_hash().into(),
-                    TransactionHash::V1(v1) => (*v1).into(),
+                    TransactionHash::Deploy(deploy_hash) => TransactionHash::Deploy(*deploy_hash),
+                    TransactionHash::V1(v1) => TransactionHash::V1(*v1),
                 })
                 .collect(),
             BlockValidationState::Valid(_) | BlockValidationState::Invalid(_) => vec![],
@@ -550,11 +554,8 @@ mod tests {
     use futures::channel::oneshot;
     use rand::Rng;
     use std::hash::Hash;
-    use BTreeSet;
 
-    use casper_types::{
-        testing::TestRng, ChainspecRawBytes, TimeDiff, Transaction, TransactionHash,
-    };
+    use casper_types::{testing::TestRng, ChainspecRawBytes, TimeDiff, Transaction, TransactionHash, Deploy};
 
     use super::{super::tests::*, *};
     use crate::{types::TransactionExt, utils::Loadable};
@@ -578,7 +579,7 @@ mod tests {
         fn footprints(&self) -> Vec<(TransactionHash, TransactionFootprint)> {
             self.transactions
                 .iter()
-                .map(|transaction| (transaction.hash(), transaction.footprint(&self.chainspec)))
+                .map(|transaction| (transaction.hash(), transaction.footprint(&self.chainspec).expect("must have footprints")))
                 .collect()
         }
     }
@@ -595,185 +596,86 @@ mod tests {
     const MAX_TRANSFER_COUNT: u64 = 1000;
 
     struct TestCase {
-        transfer_count: u64,
-        staking_count: u64,
-        install_upgrade_count: u64,
-        standard_count: u64,
         state_validator: fn((BlockValidationState, Option<Responder<bool>>)) -> bool,
     }
 
     const NO_TRANSACTIONS: TestCase = TestCase {
-        transfer_count: 0,
-        staking_count: 0,
-        install_upgrade_count: 0,
-        standard_count: 0,
         state_validator: |(state, responder)| {
             responder.is_some() && matches!(state, BlockValidationState::Valid(_))
         },
     };
 
     const FULL_STAKING: TestCase = TestCase {
-        transfer_count: 0,
-        staking_count: MAX_STAKING_COUNT,
-        install_upgrade_count: 0,
-        standard_count: 0,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
     };
 
     const LESS_THAN_MAX_STAKING: TestCase = TestCase {
-        staking_count: FULL_STAKING.staking_count - 1,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
-        ..FULL_STAKING
     };
 
     const TOO_MANY_STAKING: TestCase = TestCase {
-        staking_count: FULL_STAKING.staking_count + 1,
         state_validator: |(state, responder)| {
             responder.is_some() && matches!(state, BlockValidationState::Invalid(_))
         },
-        ..FULL_STAKING
     };
 
     const FULL_INSTALL_UPGRADE: TestCase = TestCase {
-        transfer_count: 0,
-        staking_count: 0,
-        install_upgrade_count: MAX_INSTALL_UPGRADE_COUNT,
-        standard_count: 0,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
     };
 
     const LESS_THAN_MAX_INSTALL_UPGRADE: TestCase = TestCase {
-        install_upgrade_count: FULL_INSTALL_UPGRADE.install_upgrade_count - 1,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
-        ..FULL_INSTALL_UPGRADE
     };
 
     const TOO_MANY_INSTALL_UPGRADE: TestCase = TestCase {
-        install_upgrade_count: FULL_INSTALL_UPGRADE.install_upgrade_count + 1,
         state_validator: |(state, responder)| {
             responder.is_some() && matches!(state, BlockValidationState::Invalid(_))
         },
-        ..FULL_INSTALL_UPGRADE
     };
 
     const FULL_STANDARD: TestCase = TestCase {
-        transfer_count: 0,
-        staking_count: 0,
-        install_upgrade_count: 0,
-        standard_count: MAX_STANDARD_COUNT,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
     };
 
     const LESS_THAN_MAX_STANDARD: TestCase = TestCase {
-        standard_count: FULL_STANDARD.standard_count - 1,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
-        ..FULL_STANDARD
     };
 
     const TOO_MANY_STANDARD: TestCase = TestCase {
-        standard_count: FULL_STANDARD.standard_count + 1,
         state_validator: |(state, responder)| {
             responder.is_some() && matches!(state, BlockValidationState::Invalid(_))
         },
-        ..FULL_STANDARD
     };
 
     const FULL_TRANSFER: TestCase = TestCase {
-        transfer_count: MAX_TRANSFER_COUNT,
-        staking_count: 0,
-        install_upgrade_count: 0,
-        standard_count: 0,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
     };
 
     const LESS_THAN_MAX_TRANSFER: TestCase = TestCase {
-        transfer_count: FULL_TRANSFER.transfer_count - 1,
         state_validator: |(state, responder)| {
             responder.is_none() && matches!(state, BlockValidationState::InProgress { .. })
         },
-        ..FULL_TRANSFER
     };
 
     const TOO_MANY_TRANSFER: TestCase = TestCase {
-        transfer_count: FULL_TRANSFER.transfer_count + 1,
         state_validator: |(state, responder)| {
             responder.is_some() && matches!(state, BlockValidationState::Invalid(_))
         },
-        ..FULL_TRANSFER
     };
-
-    fn run_test_case(
-        TestCase {
-            transfer_count,
-            staking_count,
-            install_upgrade_count,
-            standard_count,
-            state_validator,
-        }: TestCase,
-        rng: &mut TestRng,
-    ) {
-        let mut fixture = Fixture::new(rng);
-        let state = fixture.new_state(
-            transfer_count,
-            staking_count,
-            install_upgrade_count,
-            standard_count,
-        );
-        assert!(state_validator(state));
-    }
-
-    #[test]
-    fn new_state_should_be_valid_with_no_transactions() {
-        let mut rng = TestRng::new();
-        run_test_case(NO_TRANSACTIONS, &mut rng);
-    }
-
-    #[test]
-    fn new_state_should_respect_staking_limits() {
-        let mut rng = TestRng::new();
-        run_test_case(TOO_MANY_STAKING, &mut rng);
-        run_test_case(FULL_STAKING, &mut rng);
-        run_test_case(LESS_THAN_MAX_STAKING, &mut rng);
-    }
-
-    #[test]
-    fn new_state_should_respect_install_upgrade_limits() {
-        let mut rng = TestRng::new();
-        run_test_case(TOO_MANY_INSTALL_UPGRADE, &mut rng);
-        run_test_case(FULL_INSTALL_UPGRADE, &mut rng);
-        run_test_case(LESS_THAN_MAX_INSTALL_UPGRADE, &mut rng);
-    }
-
-    #[test]
-    fn new_state_should_respect_standard_limits() {
-        let mut rng = TestRng::new();
-        run_test_case(TOO_MANY_STANDARD, &mut rng);
-        run_test_case(FULL_STANDARD, &mut rng);
-        run_test_case(LESS_THAN_MAX_STANDARD, &mut rng);
-    }
-
-    #[test]
-    fn new_state_should_respect_transfer_limits() {
-        let mut rng = TestRng::new();
-        run_test_case(TOO_MANY_TRANSFER, &mut rng);
-        run_test_case(FULL_TRANSFER, &mut rng);
-        run_test_case(LESS_THAN_MAX_TRANSFER, &mut rng);
-    }
-
     #[test]
     fn new_state_should_be_invalid_with_duplicated_transaction() {
         let mut rng = TestRng::new();
@@ -783,7 +685,7 @@ mod tests {
         let transfers = vec![new_transfer(fixture.rng, timestamp, TimeDiff::from_millis(200)); 2];
 
         let transfers_for_block: Vec<Transaction> =
-            transfers.iter().map(|transaction| transaction).collect();
+            transfers.iter().map(|transaction| *transaction).collect();
 
         let proposed_block =
             new_proposed_block(timestamp, transfers_for_block, vec![], vec![], vec![]);
@@ -821,6 +723,25 @@ mod tests {
                 );
             }
         };
+
+        let proposed_block = new_proposed_block(
+            Timestamp::now(),
+            vec![new_transfer(&mut rng, Timestamp::now(), TimeDiff::from_seconds(60))],
+            vec![Transaction::V1(new_v1_staking(&mut rng, Timestamp::now(), TimeDiff::from_seconds(60)))],
+            vec![Transaction::V1(new_v1_install_upgrade(&mut rng, Timestamp::now(), TimeDiff::from_seconds(60)))],
+            vec![new_standard(&mut rng, Timestamp::now(), TimeDiff::from_seconds(60))],
+        );
+
+        let holder = NodeId::random(&mut rng);
+
+        let (state, maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
+
         let (state, maybe_responder) = fixture.new_state(
             transfer_count,
             staking_count,
@@ -853,8 +774,15 @@ mod tests {
     #[test]
     fn should_add_responder_if_in_progress() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let holder = NodeId::random(&mut rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
         assert_eq!(state.responder_count(), 1);
 
@@ -895,7 +823,15 @@ mod tests {
     fn should_add_new_holder_if_in_progress() {
         let mut rng = TestRng::new();
         let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let holder = NodeId::random(&mut rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
         assert_eq!(state.holders_mut().unwrap().len(), 1);
 
@@ -912,7 +848,15 @@ mod tests {
     fn should_not_change_holder_state() {
         let mut rng = TestRng::new();
         let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let holder = NodeId::random(&mut rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
         let (holder, holder_state) = state
             .holders_mut()
@@ -934,8 +878,28 @@ mod tests {
     #[test]
     fn should_start_fetching() {
         let mut rng = TestRng::new();
+        // let transaction_footprint = TransactionFootprint::from(T)
+        // The min to test
+        // Given a txn and a node that has it,
+        // Get block validation state for a probablse block
+        // that cotnain thats txn and then
+        let holder = NodeId::random(&mut rng);
+        let proposed_block = new_proposed_block(
+            Timestamp::now() + TimeDiff::from_millis(1),
+            vec![Transaction::Deploy(Deploy::random_valid_native_transfer(&mut rng))],
+            vec![],
+            vec![],
+            vec![],
+        );
+
         let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
         let (holder, holder_state) = state
             .holders_mut()
@@ -963,7 +927,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(holder, original_holder);
-                assert_eq!(missing_transactions.len(), 8);
+                assert_eq!(missing_transactions.len(), 1);
             }
             _ => panic!("unexpected return value"),
         }
@@ -977,7 +941,15 @@ mod tests {
     fn start_fetching_should_return_ongoing_if_any_holder_in_asked_state() {
         let mut rng = TestRng::new();
         let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let holder = NodeId::random(&mut rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
 
         // Change the current (only) holder's state to `Asked`.
@@ -1022,7 +994,15 @@ mod tests {
     fn start_fetching_should_return_unable_if_all_holders_in_failed_state() {
         let mut rng = TestRng::new();
         let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let holder = NodeId::random(&mut rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
 
         // Set the original holder's state to `Failed` and add some more failed.

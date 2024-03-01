@@ -1,4 +1,5 @@
 use std::{sync::Arc, time::Duration};
+use std::collections::{BTreeMap, BTreeSet};
 
 use derive_more::{Display, From};
 use prometheus::Registry;
@@ -6,10 +7,7 @@ use rand::RngCore;
 use serde::Serialize;
 use tempfile::TempDir;
 
-use casper_types::{
-    bytesrepr::Bytes, runtime_args, BlockHash, Chainspec, ChainspecRawBytes, Deploy, Digest, EraId,
-    ExecutableDeployItem, PublicKey, SecretKey, TimeDiff, Timestamp, U512,
-};
+use casper_types::{bytesrepr::Bytes, runtime_args, BlockHash, Chainspec, ChainspecRawBytes, Deploy, Digest, EraId, ExecutableDeployItem, PublicKey, SecretKey, TimeDiff, Timestamp, U512, Approval, TransactionCategory};
 
 use super::*;
 use crate::{
@@ -23,7 +21,6 @@ use crate::{
     testing::{self, network::NetworkedReactor, ConditionCheckReactor},
     types::{
         BlockPayload, ExecutableBlock, FinalizedBlock, InternalEraReport, MetaBlockState,
-        TransactionHashWithApprovals,
     },
     utils::{Loadable, WithDir, RESOURCES_PATH},
     NodeRng,
@@ -300,11 +297,11 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
     let payment = ExecutableDeployItem::ModuleBytes {
         module_bytes: Bytes::new(),
         args: runtime_args! {
-          "amount" => U512::from(chainspec.system_costs_config.wasmless_mint_cost()),
+          "amount" => U512::from(chainspec.system_costs_config.mint_costs().transfer),
         },
     };
 
-    let txns: Vec<Transaction> = std::iter::repeat_with(|| {
+    let txns: Vec<(Transaction, BTreeSet<Approval>)> = std::iter::repeat_with(|| {
         let target_public_key = PublicKey::random(rng);
         let session = ExecutableDeployItem::Transfer {
             args: runtime_args! {
@@ -313,7 +310,7 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
               "id" => Some(9_u64),
             },
         };
-        Transaction::Deploy(Deploy::new(
+        let transaction = Transaction::Deploy(Deploy::new(
             timestamp,
             ttl,
             gas_price,
@@ -323,20 +320,18 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
             session,
             &node_1_secret_key,
             None,
-        ))
+        ));
+        (transaction, BTreeSet::new())
     })
     .take(200)
     .collect();
+    let mut transactions = BTreeMap::new();
+    transactions.insert(TransactionCategory::Mint, txns.iter().map(|(transactions, approvals)|(transactions.hash(), approvals.clone())));
     let block_payload = BlockPayload::new(
-        txns.iter()
-            .map(TransactionHashWithApprovals::from)
-            .collect(),
+        transactions,
         vec![],
         vec![],
-        vec![],
-        vec![],
-        Default::default(),
-        true,
+        true
     );
     let block_2 = ExecutableBlock::from_finalized_block_and_transactions(
         FinalizedBlock::new(
@@ -347,7 +342,7 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
             2,
             PublicKey::System,
         ),
-        txns,
+        txns.iter().map(|(transaction, _approvals)| transaction.clone()).collect(),
     );
     runner
         .process_injected_effects(execute_block(block_2))
