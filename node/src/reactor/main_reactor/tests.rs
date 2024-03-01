@@ -1263,11 +1263,13 @@ async fn should_store_finalized_approvals() {
             .get_transaction_with_finalized_approvals_by_hash(&transaction_hash);
         let maybe_finalized_approvals = maybe_dwa
             .as_ref()
-            .and_then(|dwa| dwa.finalized_approvals())
-            .map(|fa| fa.inner().iter().cloned().collect());
+            .and_then(|(_transaction, maybe_approvals)| maybe_approvals.as_ref())
+            .map(|approvals| approvals.iter().cloned().collect());
         let maybe_original_approvals = maybe_dwa
             .as_ref()
-            .map(|dwa| dwa.original_approvals().iter().cloned().collect());
+            .map(|(_transaction, maybe_approvals)| maybe_approvals)
+            .and_then(|maybe_approvals| maybe_approvals.as_ref())
+            .map(|approvals| approvals.iter().cloned().collect());
         if runner.main_reactor().consensus().public_key() != &alice_public_key {
             // Bob should have finalized approvals, and his original approvals should be different.
             assert_eq!(
@@ -1333,10 +1335,7 @@ async fn empty_block_validation_regression() {
                     NewBlockPayload {
                         era_id,
                         block_payload: Arc::new(BlockPayload::new(
-                            vec![],
-                            vec![],
-                            vec![],
-                            vec![],
+                            BTreeMap::new(),
                             everyone_else.clone(),
                             Default::default(),
                             false,

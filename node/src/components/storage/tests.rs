@@ -19,7 +19,7 @@ use smallvec::smallvec;
 use casper_types::{execution::{
     execution_result_v1::{ExecutionEffect, ExecutionResultV1, Transform, TransformEntry},
     ExecutionResult, ExecutionResultV2,
-}, generate_ed25519_keypair, system::auction::UnbondingPurse, testing::TestRng, AccessRights, Block, BlockHash, BlockHeader, BlockSignatures, BlockV2, Chainspec, ChainspecRawBytes, Deploy, DeployHash, Digest, EraId, FinalitySignature, Key, ProtocolVersion, PublicKey, SecretKey, SignedBlockHeader, TestBlockBuilder, TestBlockV1Builder, TimeDiff, Transaction, TransactionHash, TransactionV1Hash, Transfer, URef, U512};
+}, generate_ed25519_keypair, system::auction::UnbondingPurse, testing::TestRng, AccessRights, Block, BlockHash, BlockHeader, BlockSignatures, BlockV2, Chainspec, ChainspecRawBytes, Deploy, DeployHash, Digest, EraId, FinalitySignature, Key, ProtocolVersion, PublicKey, SecretKey, SignedBlockHeader, TestBlockBuilder, TestBlockV1Builder, TimeDiff, Transaction, TransactionHash, TransactionV1Hash, Transfer, URef, U512, ApprovalsHash};
 use tempfile::tempdir;
 
 use super::{
@@ -943,7 +943,7 @@ fn can_retrieve_store_and_load_transactions() {
 
     // Finally try to get the execution info as well. Since we did not store any, we expect to get
     // the block hash and height from the indices.
-    let ((mut transaction_response, approvals), exec_info_response) = harness
+    let ((transaction_response, approvals), exec_info_response) = harness
         .send_request(&mut storage, |responder| {
             StorageRequest::GetTransactionAndExecutionInfo {
                 transaction_hash: transaction.hash(),
@@ -2940,13 +2940,15 @@ fn check_block_operations_with_node_1_5_2_storage() {
         let approvals_hashes = get_approvals_hashes(&mut harness, &mut storage, *hash);
         if let Some(expected_approvals_hashes) = &block_info.approvals_hashes {
             let stored_approvals_hashes = approvals_hashes.unwrap();
-            assert_eq!(
-                stored_approvals_hashes.approvals_hashes().to_vec(),
+            let actual = stored_approvals_hashes.approvals_hashes().to_vec();
+            let expected: Vec<ApprovalsHash> = {
+                let mut ret = vec![];
                 expected_approvals_hashes
                     .iter()
-                    .map(|approvals_hash| *approvals_hash)
-                    .collect::<Vec<_>>()
-            );
+                    .map(|approval_hashes| ret.append(&mut approval_hashes.approvals_hashes()));
+                ret
+            };
+            assert_eq!(actual,expected);
         }
 
         let transfers = get_block_transfers(&mut harness, &mut storage, *hash);

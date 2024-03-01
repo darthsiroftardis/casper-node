@@ -88,7 +88,10 @@ impl BlockPayload {
     /// Returns count of transactions by category.
     pub fn count(&self, category: Option<TransactionCategory>) -> usize {
         match category {
-            None => self.transactions.values().len(),
+            None => self.transactions
+                .values()
+                .map(|item| item.len())
+                .sum(),
             Some(category) => match self.transactions.get(&category) {
                 Some(values) => values.len(),
                 None => 0,

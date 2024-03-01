@@ -350,15 +350,12 @@ fn get_appendable_block_when_transfers_are_of_one_category() {
         ..Default::default()
     };
 
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+
 
     for category in &[
         TransactionCategory::Mint
     ] {
+        let chainspec = Chainspec{ transaction_config: transaction_config.clone(), ..Default::default()};
         let mut transaction_buffer =
             TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new())
                 .unwrap();
@@ -417,14 +414,12 @@ fn get_appendable_block_when_standards_are_of_one_category() {
         ..Default::default()
     };
 
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
+
     for category in &[
         TransactionCategory::Standard,
     ] {
+        let chainspec = Chainspec{ transaction_config: transaction_config.clone(), ..Default::default()};
         let mut transaction_buffer =
             TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new())
                 .unwrap();
@@ -491,13 +486,7 @@ fn block_fully_saturated() {
         ..Default::default()
     };
 
-
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
-
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
 
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
@@ -589,11 +578,7 @@ fn block_not_fully_saturated() {
         block_max_approval_count: 210,
         ..Default::default()
     };
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
 
@@ -688,11 +673,7 @@ fn excess_transactions_do_not_sneak_into_transfer_bucket() {
         block_max_approval_count: 210,
         ..Default::default()
     };
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
 
@@ -747,11 +728,7 @@ fn excess_transactions_do_not_sneak_into_staking_bucket() {
         block_max_approval_count: 210,
         ..Default::default()
     };
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
 
@@ -806,11 +783,7 @@ fn excess_transactions_do_not_sneak_into_install_upgrades_bucket() {
         block_max_approval_count: 210,
         ..Default::default()
     };
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
 
@@ -865,11 +838,7 @@ fn excess_transactions_do_not_sneak_into_standards_bucket() {
         block_max_approval_count: 210,
         ..Default::default()
     };
-    let chainspec = {
-        let mut chainspec = Chainspec::default();
-        chainspec.transaction_config;
-        chainspec
-    };
+    let chainspec = Chainspec{ transaction_config, ..Default::default()};
     let mut transaction_buffer =
         TransactionBuffer::new(Arc::new(chainspec), Config::default(), &Registry::new()).unwrap();
 

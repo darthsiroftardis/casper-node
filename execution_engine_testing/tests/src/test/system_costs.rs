@@ -170,7 +170,6 @@ fn add_bid_and_withdraw_bid_have_expected_costs() {
 #[test]
 fn upgraded_add_bid_and_withdraw_bid_have_expected_costs() {
     let system_costs =SystemConfig::default();
-    let new_wasmless_transfer_cost = system_costs.mint_costs().transfer;
     let new_max_associated_keys = DEFAULT_MAX_ASSOCIATED_KEYS;
 
     let new_auction_costs = AuctionCosts {
@@ -462,7 +461,6 @@ fn delegate_and_undelegate_have_expected_costs() {
 #[test]
 fn upgraded_delegate_and_undelegate_have_expected_costs() {
     let system_costs = SystemConfig::default();
-    let new_wasmless_transfer_cost = system_costs.mint_costs().transfer;
     let new_max_associated_keys = DEFAULT_MAX_ASSOCIATED_KEYS;
 
     let new_auction_costs = AuctionCosts {
@@ -945,8 +943,10 @@ fn should_verify_wasm_add_bid_wasm_cost_is_not_recursive() {
     let new_wasmless_transfer_cost = 0;
     let new_max_associated_keys = DEFAULT_MAX_ASSOCIATED_KEYS;
     let new_auction_costs = AuctionCosts::default();
-    let mut new_mint_costs = MintCosts::default();
-    new_mint_costs.transfer = new_wasmless_transfer_cost;
+    let new_mint_costs = MintCosts {
+        transfer: new_wasmless_transfer_cost,
+        ..Default::default()
+    };
     let new_standard_payment_costs = StandardPaymentCosts::default();
     let new_handle_payment_costs = HandlePaymentCosts::default();
 

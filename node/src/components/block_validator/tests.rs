@@ -3,7 +3,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use std::hash::Hash;
 
 use derive_more::From;
 use itertools::Itertools;
@@ -77,6 +76,9 @@ impl MockReactor {
     ) {
         while !transactions_to_fetch.is_empty() || !transactions_to_not_fetch.is_empty() {
             let ((_ancestor, reactor_event), _) = self.scheduler.pop().await;
+            println!("TOF {:?}", transactions_to_fetch);
+            println!("NTF {:?}", transactions_to_not_fetch);
+            println!("{:#?}", reactor_event);
             if let ReactorEvent::TransactionFetcher(FetcherRequest {
                 id,
                 peer,
@@ -265,10 +267,10 @@ async fn validate_block(
     // Assemble the block to be validated.
     let proposed_block = new_proposed_block(
         timestamp,
-        transfers,
-        stakings,
-        installs_upgrades,
-        standards,
+        transfers.clone(),
+        stakings.clone(),
+        installs_upgrades.clone(),
+        standards.clone(),
     );
 
     // Create the reactor and component.
@@ -573,10 +575,10 @@ async fn should_fetch_from_multiple_peers() {
         // Assemble the block to be validated.
         let proposed_block = new_proposed_block(
             1100.into(),
-            transfers,
+            transfers.clone(),
             vec![],
             vec![],
-            standard,
+            standard.clone(),
         );
 
         // Create the reactor and component.
@@ -667,7 +669,10 @@ async fn should_fetch_from_multiple_peers() {
             &transfers[1],
         ]
         .into_iter()
-        .filter(|transaction| missing.contains(*transaction.hash()))
+        .filter(|transaction| {
+            let txn_hash: TransactionHash = transaction.hash();
+            missing.contains(&txn_hash)
+        })
         .cloned()
         .collect();
         let transactions_to_not_fetch = vec![standard[2].hash(), transfers[2].hash()]

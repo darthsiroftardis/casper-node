@@ -119,6 +119,7 @@ impl BlockValidationState {
         chainspec: &Chainspec,
     ) -> (Self, Option<Responder<bool>>) {
         // let transaction_count = proposed_block.transaction_count();
+        // println!("{transaction_count}");
         // if transaction_count == 0 {
         //     let state = BlockValidationState::Valid(proposed_block.timestamp());
         //     return (state, Some(responder));
@@ -268,6 +269,7 @@ impl BlockValidationState {
     ///   * if `Valid` or `Invalid`, returns `ValidationSucceeded` or `ValidationFailed`
     ///     respectively
     pub(super) fn start_fetching(&mut self) -> MaybeStartFetching {
+        println!("fetching?");
         match self {
             BlockValidationState::InProgress {
                 missing_transactions,
@@ -553,7 +555,6 @@ impl Display for BlockValidationState {
 mod tests {
     use futures::channel::oneshot;
     use rand::Rng;
-    use std::hash::Hash;
 
     use casper_types::{testing::TestRng, ChainspecRawBytes, TimeDiff, Transaction, TransactionHash, Deploy};
 
@@ -685,7 +686,7 @@ mod tests {
         let transfers = vec![new_transfer(fixture.rng, timestamp, TimeDiff::from_millis(200)); 2];
 
         let transfers_for_block: Vec<Transaction> =
-            transfers.iter().map(|transaction| *transaction).collect();
+            transfers.iter().map(|transaction| transaction.clone()).collect();
 
         let proposed_block =
             new_proposed_block(timestamp, transfers_for_block, vec![], vec![], vec![]);
@@ -705,24 +706,7 @@ mod tests {
     #[test]
     fn new_state_should_be_in_progress_with_some_transactions() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-
-        // This test must generate number of transactions within the limits as per the chainspec.
-        let (transfer_count, staking_count, install_upgrade_count, standard_count) = loop {
-            let transfer_count = fixture.rng.gen_range(0..10);
-            let staking_count = fixture.rng.gen_range(0..20);
-            let install_upgrade_count = fixture.rng.gen_range(0..2);
-            let standard_count = fixture.rng.gen_range(0..10);
-            // Ensure at least one transaction is generated. Otherwise the state will be Valid.
-            if transfer_count + staking_count + install_upgrade_count + standard_count > 0 {
-                break (
-                    transfer_count,
-                    staking_count,
-                    install_upgrade_count,
-                    standard_count,
-                );
-            }
-        };
+        let fixture = Fixture::new(&mut rng);
 
         let proposed_block = new_proposed_block(
             Timestamp::now(),
@@ -742,13 +726,6 @@ mod tests {
             &Chainspec::default()
         );
 
-        let (state, maybe_responder) = fixture.new_state(
-            transfer_count,
-            staking_count,
-            install_upgrade_count,
-            standard_count,
-        );
-
         match state {
             BlockValidationState::InProgress {
                 missing_transactions,
@@ -757,9 +734,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(
-                    missing_transactions.len() as u64,
-                    standard_count + transfer_count + install_upgrade_count + staking_count
-                );
+                    missing_transactions.len() as u64, 4);
                 assert_eq!(holders.len(), 1);
                 assert_eq!(holders.values().next().unwrap(), &HolderState::Unasked);
                 assert_eq!(responders.len(), 1);
@@ -774,8 +749,10 @@ mod tests {
     #[test]
     fn should_add_responder_if_in_progress() {
         let mut rng = TestRng::new();
-        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
-        let holder = NodeId::random(&mut rng);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
             HashSet::new(),
@@ -822,9 +799,10 @@ mod tests {
     #[test]
     fn should_add_new_holder_if_in_progress() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
-        let holder = NodeId::random(&mut rng);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
             HashSet::new(),
@@ -847,8 +825,9 @@ mod tests {
     #[test]
     fn should_not_change_holder_state() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
         let holder = NodeId::random(&mut rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
@@ -892,7 +871,7 @@ mod tests {
             vec![],
         );
 
-        let mut fixture = Fixture::new(&mut rng);
+        let fixture = Fixture::new(&mut rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
             HashSet::new(),
@@ -940,9 +919,10 @@ mod tests {
     #[test]
     fn start_fetching_should_return_ongoing_if_any_holder_in_asked_state() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
-        let holder = NodeId::random(&mut rng);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
             HashSet::new(),
@@ -993,9 +973,10 @@ mod tests {
     #[test]
     fn start_fetching_should_return_unable_if_all_holders_in_failed_state() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let proposed_block = new_proposed_block(Timestamp::now(),vec![], vec![], vec![], vec![], vec![]);
-        let holder = NodeId::random(&mut rng);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
         let (mut state, _maybe_responder) = BlockValidationState::new(
             &proposed_block,
             HashSet::new(),
@@ -1053,8 +1034,17 @@ mod tests {
     #[test]
     fn state_should_change_to_validation_succeeded() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
 
         // While there is still at least one missing transaction, `try_add_transaction_footprint`
@@ -1082,8 +1072,17 @@ mod tests {
     #[test]
     fn unrelated_transaction_added_should_not_change_state() {
         let mut rng = TestRng::new();
-        let mut fixture = Fixture::new(&mut rng);
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let fixture = Fixture::new(&mut rng);
+        let transfer = new_transfer(fixture.rng, Timestamp::now(), TimeDiff::from_seconds(30));
+        let proposed_block = new_proposed_block(Timestamp::now(),vec![transfer], vec![], vec![], vec![]);
+        let holder = NodeId::random(fixture.rng);
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            holder,
+            new_responder(),
+            &Chainspec::default()
+        );
         let (appendable_block_before, missing_transactions_before, holders_before) = match &state {
             BlockValidationState::InProgress {
                 appendable_block,
@@ -1138,14 +1137,27 @@ mod tests {
             new_standard(fixture.rng, Timestamp::MAX, TimeDiff::from_seconds(1));
         let invalid_transaction_hash = invalid_transaction.hash();
         fixture.transactions.push(invalid_transaction.clone());
-        let (mut state, _maybe_responder) = fixture.new_state(2, 2, 2, 2);
+        let proposed_block = new_proposed_block(
+            Timestamp::now(),
+            vec![invalid_transaction.clone()],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let (mut state, _maybe_responder) = BlockValidationState::new(
+            &proposed_block,
+            HashSet::new(),
+            NodeId::random(fixture.rng),
+            new_responder(),
+            &Chainspec::default(),
+        );
         assert!(matches!(state, BlockValidationState::InProgress { .. }));
 
         // Add some valid deploys, should keep the state `InProgress` and never return responders.
         let mut footprints = fixture.footprints();
         while footprints.len() > 3 {
             let (dt_hash, footprint) = footprints.pop().unwrap();
-            if dt_hash.transaction_hash() == invalid_transaction_hash {
+            if dt_hash == invalid_transaction_hash {
                 continue;
             }
             let responders = state.try_add_transaction_footprint(&dt_hash, &footprint);

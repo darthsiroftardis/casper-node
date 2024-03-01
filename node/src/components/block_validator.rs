@@ -458,6 +458,7 @@ impl BlockValidator {
             responder,
             self.chainspec.as_ref(),
         );
+        println!("{:?}", state);
         let effects = match state.start_fetching() {
             MaybeStartFetching::Start {
                 holder,

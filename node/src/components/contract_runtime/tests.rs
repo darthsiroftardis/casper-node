@@ -326,11 +326,11 @@ async fn should_not_set_shared_pre_state_to_lower_block_height() {
     .take(200)
     .collect();
     let mut transactions = BTreeMap::new();
-    transactions.insert(TransactionCategory::Mint, txns.iter().map(|(transactions, approvals)|(transactions.hash(), approvals.clone())));
+    transactions.insert(TransactionCategory::Mint, txns.iter().map(|(transactions, approvals)|(transactions.hash(), approvals.clone())).collect());
     let block_payload = BlockPayload::new(
         transactions,
         vec![],
-        vec![],
+        Default::default(),
         true
     );
     let block_2 = ExecutableBlock::from_finalized_block_and_transactions(
