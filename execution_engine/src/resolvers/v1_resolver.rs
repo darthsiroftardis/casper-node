@@ -168,9 +168,9 @@ impl ModuleImportResolver for RuntimeModuleImportResolver {
                 Signature::new(&[ValueType::I32; 11][..], Some(ValueType::I32)),
                 FunctionIndex::AddContractVersionWithMessageTopics.into(),
             ),
-            "casper_add_package_version" => FuncInstance::alloc_host(
+            "casper_add_package_version_with_message_topics" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 11][..], Some(ValueType::I32)),
-                FunctionIndex::AddPackageVersion.into(),
+                FunctionIndex::AddPackageVersionWithMessageTopics.into(),
             ),
             "casper_disable_contract_version" => FuncInstance::alloc_host(
                 Signature::new(&[ValueType::I32; 4][..], Some(ValueType::I32)),

@@ -537,7 +537,7 @@ extern "C" {
     /// * `message_topics_size` - size of serialized BTreeMap<String, MessageTopicOperation>
     /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
     /// * `output_size` - expected width of output (currently 32)
-    pub fn casper_add_package_version(
+    pub fn casper_add_package_version_with_message_topics(
         package_hash_ptr: *const u8,
         package_hash_size: usize,
         version_ptr: *const u32,

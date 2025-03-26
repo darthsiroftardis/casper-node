@@ -38,7 +38,7 @@ pub(crate) enum FunctionIndex {
     CreateContractPackageAtHash,
     AddContractVersion,
     AddContractVersionWithMessageTopics,
-    AddPackageVersion,
+    AddPackageVersionWithMessageTopics,
     DisableContractVersion,
     CallVersionedContract,
     CreateContractUserGroup,
